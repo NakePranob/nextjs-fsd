@@ -181,7 +181,7 @@ export async function addAuth(opts: AddOptions): Promise<void> {
 
   await confirmAdd(
     [
-      `add ${pc.cyan(`${config.srcDir}/shared/auth/`)} — session hooks (useSession/useLogin/useLogout), useRequireSession, and an auth error catalog`,
+      `add ${pc.cyan(`${config.srcDir}/shared/auth/`)} — session hooks (useSession/useLogin/useLogout), useRequireSession with a ?next= round trip, and an auth error catalog`,
       `add ${pc.cyan(`${config.srcDir}/_pages/login/`)} and ${pc.cyan(`${config.appDir}/login/page.tsx`)}`,
       pc.yellow(
         "assumes the API answers POST /auth/login with an access token, keeps the refresh token in an httpOnly cookie, and serves GET /users/me — adjust the paths and the Session type if yours differ"
@@ -194,11 +194,21 @@ export async function addAuth(opts: AddOptions): Promise<void> {
   const context = errorContext(config);
   const auth = `${config.srcDir}/shared/auth`;
   const slice = `${config.srcDir}/_pages/login`;
+  // Same rule as client.test.ts: `bun test` resolves the alias with no config,
+  // every other runner needs setup this CLI has no business writing. What it
+  // covers is the open-redirect guard on ?next=, which is the one thing here
+  // that fails as a security bug rather than a visible one.
+  const writesTest = config.packageManager === "bun";
   const written = await applyTemplates(
     projectDir,
     [
       { template: "add/auth/session.ts.hbs", output: `${auth}/session.ts` },
       { template: "add/auth/require-session.ts.hbs", output: `${auth}/require-session.ts` },
+      {
+        template: "add/auth/require-session.test.ts.hbs",
+        output: `${auth}/require-session.test.ts`,
+        when: () => writesTest,
+      },
       { template: "add/auth/auth-errors.ts.hbs", output: `${auth}/auth-errors.ts` },
       { template: "add/auth/index.ts.hbs", output: `${auth}/index.ts` },
       { template: "add/auth/login-index.ts.hbs", output: `${slice}/index.ts` },

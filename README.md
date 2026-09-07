@@ -366,7 +366,7 @@ src/shared/api/api-error.ts       # ApiError + toApiError: one failure type at t
 src/shared/api/error-catalog.ts   # the codes every endpoint can answer with
 src/shared/api/error-resolver.ts  # code -> one sentence, from the caller's catalogs
 src/shared/api/client.ts          # axios instance: bearer token in, ApiError out
-src/shared/api/query-client.ts    # QueryClient; a 4xx is an answer, not a retry
+src/shared/api/query-client.ts    # QueryClient + sessionKey; a 401 anywhere ends the session
 src/shared/api/client.test.ts     # bun projects only: the two silent refresh rules
 src/shared/api/index.ts
 src/shared/auth/access-token.ts   # the in-memory token the interceptor reads
@@ -390,6 +390,13 @@ script on a bun project.
 - **A 401 from `/auth/*` is not refreshed.** It means wrong password, not
   expired token; refreshing would spend the cookie of whoever is already
   signed in on that browser.
+- **A 401 that survives the refresh ends the session, whichever request found
+  it.** The refresh cookie is gone by then — revoked, expired, or logged out
+  everywhere — so the QueryClient drops `sessionKey` and `useRequireSession`
+  redirects. Without it the session query stays fresh for its whole
+  `staleTime` while every other request 401s: a page that looks signed in and
+  does nothing. Mutations count too; the save that will never submit is the
+  one that matters.
 - **Copy lives in a per-domain catalog, never one global map.** The domain that
   raises a code is the only place that knows what it means to a user, and a
   single map becomes a merge-conflict magnet as soon as two features grow at
@@ -425,7 +432,8 @@ so there is no choice to offer.
 
 ~~~text
 src/shared/auth/session.ts          # useSession, useLogin, useLogout
-src/shared/auth/require-session.ts  # useRequireSession — UX, not the gate
+src/shared/auth/require-session.ts  # useRequireSession + safeNext — UX, not the gate
+src/shared/auth/require-session.test.ts  # bun projects only: the ?next= guard
 src/shared/auth/auth-errors.ts      # the auth surface's own catalog
 src/shared/auth/index.ts
 src/_pages/login/index.ts
@@ -449,6 +457,16 @@ it in the body and keeps the refresh token in an httpOnly cookie, so there is
 nothing to persist: a reload starts with no token and the first 401 spends the
 cookie on a new one. `localStorage` would only make the token readable by any
 injected script.
+
+A deep link survives the round trip: `useRequireSession` sends people to
+`/login?next=<path>` and the login form picks that back up. `safeNext` is
+what makes it safe to follow — it resolves the value against a sentinel origin
+and keeps it only if it lands on the same site, because a hand-rolled
+`startsWith("/")` check is bypassed by `/<TAB>/evil.example` (browsers strip
+tab, CR and LF *before* parsing, so it becomes `//evil.example`) and your
+login screen turns into a redirector wearing your own domain. Path only, no
+query string: reading that would mean `useSearchParams()`, and a Suspense
+boundary on every page behind the guard.
 
 `useRequireSession` redirects anonymous visitors, but treat it as UX only —
 the API's own middleware is the actual gate and runs on every request no

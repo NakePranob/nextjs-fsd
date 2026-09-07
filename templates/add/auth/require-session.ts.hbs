@@ -1,9 +1,47 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
 
 import { useSession } from "./session";
+
+/**
+ * A base that is nowhere: only used so a relative `next` has something to
+ * resolve against. Any `next` that escapes it is an absolute URL.
+ */
+const SENTINEL_ORIGIN = "http://localhost";
+
+/**
+ * Where /login should send someone once they are back in — the `?next=` it was
+ * handed, or the home page.
+ *
+ * **Only ever a same-site path.** An unchecked `next` turns your own login
+ * screen into a redirector to anywhere, wearing your domain in the link
+ * (OWASP: unvalidated redirect, CWE-601).
+ *
+ * The check is the WHATWG URL parser rather than a prefix test, because the
+ * prefix test is the version that gets bypassed: browsers strip tab, CR and LF
+ * out of a URL *before* parsing it, so a path like `/<TAB>/evil.com` starts
+ * with a single slash right up until it becomes `//evil.com` and leaves the
+ * site. Resolving against a sentinel origin asks the same parser the browser
+ * will use, and anything landing on another origin falls back home — a mangled
+ * `next` is not worth blocking a successful sign-in over.
+ */
+export function safeNext(next: string | null | undefined): string {
+  // We only ever write a pathname into `next`, so anything else is malformed
+  // rather than merely unsafe. The parser below would resolve "evil.com" to a
+  // harmless same-origin /evil.com; there is no reason to follow it.
+  if (!next?.startsWith("/")) return "/";
+  try {
+    const url = new URL(next, SENTINEL_ORIGIN);
+    // Escaped the sentinel: absolute, protocol-relative, or another scheme.
+    if (url.origin !== SENTINEL_ORIGIN) return "/";
+    return url.pathname + url.search + url.hash;
+  } catch {
+    // new URL throws on syntax no parser accepts (an unterminated IPv6 host).
+    return "/";
+  }
+}
 
 /**
  * Session for a page that needs one, sending anonymous visitors to /login.
@@ -11,19 +49,21 @@ import { useSession } from "./session";
  * UX only — the real gate is the API's own auth middleware, which every
  * request passes through regardless of what the browser rendered. It cannot
  * move into `proxy.ts` (Next 16's renamed middleware) either: the refresh
- * cookie belongs to the API's origin, so the Next server never sees it and
- * has nothing to check.
+ * cookie belongs to the API's origin, so the Next server never sees it and has
+ * nothing to check.
  *
- * No return-to-url: add a `?next=` round trip when deep links into protected
- * pages start mattering.
+ * The path travels as `?next=`, so a deep link survives the round trip. Path
+ * only, no query string: reading it would mean `useSearchParams()`, which
+ * drags a Suspense boundary onto every page behind the guard.
  */
 export function useRequireSession() {
   const session = useSession();
   const router = useRouter();
+  const pathname = usePathname();
 
   useEffect(() => {
-    if (session.isError) router.replace("/login");
-  }, [session.isError, router]);
+    if (session.isError) router.replace(`/login?next=${encodeURIComponent(pathname)}`);
+  }, [session.isError, pathname, router]);
 
   return session;
 }

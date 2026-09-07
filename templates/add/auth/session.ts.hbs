@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient, type QueryClient, type UseQueryResult } from "@tanstack/react-query";
 
-import { ApiError, api } from "{{alias}}/shared/api";
+import { ApiError, api, sessionKey } from "{{alias}}/shared/api";
 
 import { setAccessToken } from "./access-token";
 
@@ -19,7 +19,9 @@ export type LoginInput = { email: string; password: string };
 /** Body of login/refresh — the refresh token is an httpOnly cookie, not here. */
 type AuthTokens = { access_token: string; token_type: string; expires_in: number };
 
-export const sessionKey = ["session"] as const;
+// Defined next to the QueryClient that acts on it (a 401 anywhere drops
+// this entry), re-exported here because a session key reads as auth.
+export { sessionKey };
 
 /**
  * The signed-in user, or an error when there is none.

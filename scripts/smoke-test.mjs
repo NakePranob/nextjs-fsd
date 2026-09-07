@@ -429,7 +429,28 @@ check("a bun project gets the refresh test and the types it needs to compile", (
 });
 check("an npm project gets neither the test nor the bun types", () => {
   assert.ok(!has(a, "src/shared/api/client.test.ts"));
+  assert.ok(!has(a, "src/shared/auth/require-session.test.ts"));
   assert.ok(!JSON.parse(read(a, "package.json")).devDependencies?.["@types/bun"]);
+});
+
+cli(c, ["add", "auth", "--no-install", "-y"]);
+check("a bun project gets the ?next= guard test too", () => {
+  // The other fixtures are npm-shaped, so this is the only place the auth
+  // test template is written at all — and the only place tsc sees it.
+  assert.match(read(c, "src/shared/auth/require-session.test.ts"), /from "bun:test"/);
+  assert.match(read(c, "src/shared/auth/require-session.test.ts"), /safeNext/);
+});
+check("the login form picks ?next= back up instead of always landing home", () =>
+  assert.match(read(c, "src/_pages/login/ui/login-form.tsx"), /router\.replace\(safeNext\(/)
+);
+check("a 401 from anywhere drops the session entry", () => {
+  const queryClient = read(c, "src/shared/api/query-client.ts");
+  assert.match(queryClient, /export const sessionKey/);
+  assert.match(queryClient, /mutationCache: new MutationCache/);
+  // shared/auth may not exist at all (error handling installs alone), so the
+  // key has to live here and be imported back, never the other way round.
+  // The prose above it says so; only an import would be the bug.
+  assert.doesNotMatch(queryClient, /^import .*shared\/auth/m);
 });
 
 // ------------------------------------------------------- typecheck the output
@@ -437,7 +458,7 @@ check("an npm project gets neither the test nor the bun types", () => {
 console.log("\ntypecheck");
 typecheck(a, "app/, thai, auth + pages + slices");
 typecheck(b, "src/app/, english, auth");
-typecheck(c, "bun, error handling + generated test");
+typecheck(c, "bun, error handling + auth + both generated tests");
 
 // --------------------------------------------------------- no unrendered vars
 
