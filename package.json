@@ -1,6 +1,6 @@
 {
   "name": "@nakedev/nextjs-fsd",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Keep a Next.js App Router project on Feature-Sliced Design: init the layout, generate slices, add auth and API error handling",
   "repository": {
     "type": "git",

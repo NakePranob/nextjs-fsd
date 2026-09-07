@@ -1,0 +1,38 @@
+import { expect, test } from "bun:test";
+
+import { safeNext } from "./require-session";
+
+/**
+ * The one rule here that is a security bug rather than a bug: an unchecked
+ * `?next=` makes your own login screen a redirector to anywhere — the link
+ * wears your domain, the landing page is someone else's.
+ *
+ * Every input below is an absolute URL to some browser or parser, and a
+ * hand-rolled `startsWith("/")` check passes four of them.
+ */
+test.each([
+  ["//evil.example", "protocol-relative"],
+  ["/\\evil.example", "backslash, which the URL parser reads as //"],
+  ["https://evil.example", "absolute"],
+  ["javascript:alert(1)", "scheme"],
+  ["evil.example", "no leading slash"],
+  ["", "empty"],
+  // Browsers strip these out before parsing, so each one starts with a single
+  // slash and then does not.
+  ["/\t/evil.example", "tab"],
+  ["/\t\\evil.example", "tab then backslash"],
+  ["/\n//evil.example", "newline"],
+  ["/\r\\\\evil.example", "carriage return"],
+])("%s (%s) falls back home", (next) => {
+  expect(safeNext(next)).toBe("/");
+});
+
+test("a missing next falls back home", () => {
+  expect(safeNext(null)).toBe("/");
+  expect(safeNext(undefined)).toBe("/");
+});
+
+test("a same-site path is kept, query and hash included", () => {
+  expect(safeNext("/dashboard")).toBe("/dashboard");
+  expect(safeNext("/orders?status=open#row-3")).toBe("/orders?status=open#row-3");
+});

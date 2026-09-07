@@ -1,6 +1,15 @@
-import { QueryClient } from "@tanstack/react-query";
+import { MutationCache, QueryCache, QueryClient } from "@tanstack/react-query";
 
 import { ApiError } from "./api-error";
+
+/**
+ * The cache entry that holds the signed-in user.
+ *
+ * It lives here rather than in shared/auth because this file is written
+ * first — error handling installs with or without auth — and because the
+ * QueryClient is what acts on it. `add auth` imports it back in session.ts.
+ */
+export const sessionKey = ["session"] as const;
 
 /**
  * One QueryClient per browser session (see _app/providers) — created through a
@@ -8,7 +17,36 @@ import { ApiError } from "./api-error";
  * between two users' requests.
  */
 export function makeQueryClient(): QueryClient {
-  return new QueryClient({
+  /**
+   * A 401 that reaches here already survived the client's silent refresh (see
+   * client.ts), so the refresh cookie is gone too — revoked from another
+   * device, expired, or logged out everywhere. The session is over no matter
+   * which request happened to find out.
+   *
+   * Dropping the cached session makes useSession refetch, 401 again, and
+   * useRequireSession redirect. Without it the session query sits fresh for
+   * its whole staleTime while every other request 401s: a page that looks
+   * signed in and does nothing, until a window focus eventually refetches it.
+   */
+  const endSessionOn401 = (error: unknown) => {
+    if (error instanceof ApiError && error.status === 401) {
+      client.removeQueries({ queryKey: sessionKey });
+    }
+  };
+
+  const client: QueryClient = new QueryClient({
+    queryCache: new QueryCache({
+      onError: (error, query) => {
+        // The session query's own 401 already ends the session — removing the
+        // query it is currently failing on would refetch, 401, and loop.
+        if (query.queryKey[0] === sessionKey[0]) return;
+        endSessionOn401(error);
+      },
+    }),
+    // Same rule for writes. A session usually dies while someone is reading,
+    // but the one that matters is the save that comes back 401 — leaving them
+    // staring at a form that will never submit is the worst version of this.
+    mutationCache: new MutationCache({ onError: (error) => endSessionOn401(error) }),
     defaultOptions: {
       queries: {
         staleTime: 30_000,
@@ -22,4 +60,5 @@ export function makeQueryClient(): QueryClient {
       },
     },
   });
+  return client;
 }
