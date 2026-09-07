@@ -16,6 +16,7 @@
     "LICENSE"
   ],
   "type": "commonjs",
+  "packageManager": "pnpm@11.10.0",
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
