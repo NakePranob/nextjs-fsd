@@ -84,6 +84,13 @@ group; keep that test passing rather than working around it.
 
 ## Templates
 
+- The templates are the output, so `.gitattributes` pins the whole repo to LF
+  in the working tree. Git on Windows would otherwise check them out as CRLF
+  and the CLI would emit CRLF there and LF everywhere else — a generator whose
+  output depends on the host OS gives two developers on one project diffs that
+  are nothing but line endings. The smoke test asserts no generated file
+  contains `\r\n`; on a Unix host that check passes trivially, so it is really
+  a guard for Windows CI.
 - No literal `{{` outside a Handlebars expression. JSX uses one brace; `{{` in
   a template is an expression whether you meant it or not. The smoke test
   asserts no `{{` survives into any generated file.

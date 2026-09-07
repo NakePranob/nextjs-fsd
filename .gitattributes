@@ -1,0 +1,9 @@
+# The templates are the CLI's output. Git on Windows converts a checked-out
+# text file to CRLF by default, which made the generator emit CRLF there and LF
+# everywhere else — two developers on one project producing diffs that differ
+# only by line ending, and a Windows CI run failing on an assertion that was
+# right about the content.
+#
+# A generator's output must not depend on the host OS, so every text file in
+# this repo stays LF in the working tree on all platforms.
+* text=auto eol=lf

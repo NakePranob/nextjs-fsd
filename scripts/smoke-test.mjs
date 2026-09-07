@@ -159,6 +159,18 @@ function cliFails(dir, args) {
 }
 
 const read = (dir, file) => fs.readFileSync(path.join(dir, file), "utf8");
+
+/** Every generated text file in a fixture, node_modules aside. */
+function* walkGenerated(dir) {
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      if (entry.name !== "node_modules") yield* walkGenerated(full);
+    } else if (/\.(ts|tsx|mjs|json|css|md)$/.test(entry.name)) {
+      yield full;
+    }
+  }
+}
 const has = (dir, file) => fs.existsSync(path.join(dir, file));
 
 function assertFiles(dir, files) {
@@ -193,7 +205,10 @@ check("init writes the layer, linter, shadcn and agent files", () =>
 );
 check("the skill carries frontmatter and defers FSD theory to the FSD skill", () => {
   const skill = read(a, ".claude/skills/nextjs-fsd/SKILL.md");
-  assert.match(skill, /^---\nname: nextjs-fsd\ndescription: >/);
+  // Line-ending agnostic on purpose: what this asserts is the frontmatter, and
+  // a CRLF checkout is a separate failure with its own check below — one
+  // assertion should not fail for the other's reason.
+  assert.match(skill, /^---\r?\nname: nextjs-fsd\r?\ndescription: >/);
   assert.match(skill, /nextjs-fsd\.config\.json/);
   assert.match(skill, /feature-sliced-design` skill/);
   // The commands it tells an agent to run have to be the ones that exist.
@@ -413,6 +428,19 @@ typecheck(c, "bun, error handling + generated test");
 // --------------------------------------------------------- no unrendered vars
 
 console.log("\nrendered output");
+check("generated files use LF, whatever the host OS", () => {
+  // Git on Windows checks text files out as CRLF by default, so without a
+  // .gitattributes pinning LF the templates arrive with \r\n and the CLI emits
+  // it — a generator whose output depends on the host OS produces diffs
+  // between developers that are nothing but line endings.
+  const crlf = [];
+  for (const dir of [a, b, c]) {
+    for (const file of walkGenerated(dir)) {
+      if (fs.readFileSync(file, "utf8").includes("\r\n")) crlf.push(path.relative(dir, file));
+    }
+  }
+  assert.deepEqual(crlf, [], `CRLF in: ${crlf.join(", ")}`);
+});
 check("no template variable survived into any generated file", () => {
   const leaks = [];
   for (const dir of [a, b]) {
