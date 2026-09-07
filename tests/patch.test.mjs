@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 
-import { patchEslintConfig, patchLayoutProviders, patchTsconfigPaths } from "../dist/utils/project.js";
+import { detectAppDir, patchEslintConfig, patchLayoutProviders, patchTsconfigPaths } from "../dist/utils/project.js";
 import { addTailwindSources } from "../dist/commands/init.js";
 import { validateSliceName, validateRoute, resolveNaming } from "../dist/utils/naming.js";
 
@@ -167,4 +167,23 @@ test("every generated eslint block configures no-restricted-imports at most once
   // Overlap between groups is the same trap: src/features/** must not also be
   // covered by a broader src/** block.
   assert.ok(!blocks.some((block) => block.files.some((glob) => glob === "src/**/*.{ts,tsx}")));
+});
+
+test("appDir is posix even on Windows, because it becomes a glob", () => {
+  // path.join would give "src\\app" on Windows, and that string is
+  // interpolated into ESLint `files` globs and Tailwind `@source` lines, where
+  // a backslash matches nothing. The bug is invisible on the filesystem —
+  // Windows accepts both separators — and shows up as a lint rule that
+  // silently stops applying.
+  const dir = tempProject();
+  fs.mkdirSync(path.join(dir, "src", "app"), { recursive: true });
+  fs.writeFileSync(path.join(dir, "src", "app", "layout.tsx"), "export default function L() {}\n");
+  fs.rmSync(path.join(dir, "app"), { recursive: true, force: true });
+  fs.writeFileSync(
+    path.join(dir, "package.json"),
+    JSON.stringify({ dependencies: { next: "16.3.4" } })
+  );
+
+  assert.equal(detectAppDir(dir), "src/app");
+  assert.doesNotMatch(detectAppDir(dir), /\\\\/);
 });

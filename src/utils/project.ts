@@ -55,7 +55,13 @@ export function detectAppDir(projectDir: string): string {
     );
   }
 
-  for (const candidate of ["app", path.join("src", "app")]) {
+  // Posix separators, deliberately, even on Windows: this value is not only a
+  // path. It is interpolated into ESLint `files` globs, Tailwind `@source`
+  // lines and the generated docs, and a glob with a backslash matches nothing
+  // — so a project initialised on Windows would silently lose the rule that
+  // keeps features out of the routing layer. `path.join` normalises it back
+  // for the filesystem calls that need it.
+  for (const candidate of ["app", "src/app"]) {
     if (fs.existsSync(path.join(projectDir, candidate, "layout.tsx"))) return candidate;
   }
   throw new Error(

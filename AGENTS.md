@@ -72,6 +72,12 @@ learned the hard way, each now pinned by a test:
   broken file is the worst outcome available.
 - **Prepend, do not replace, in a shared value.** The tsconfig `@/*` alias gets
   `./src/*` in front of whatever was there, so existing imports keep resolving.
+- **A path that becomes a glob stays posix.** `detectAppDir` returns
+  `"src/app"`, never `path.join("src", "app")`: the value is interpolated into
+  ESLint `files` globs, Tailwind `@source` lines and the generated docs, and a
+  glob containing a backslash matches nothing. The filesystem hides the bug —
+  Windows accepts both separators — so it surfaces as a lint rule that quietly
+  stopped applying. Windows CI is the only thing that catches this class.
 
 ## Editing generated ESLint or Tailwind config
 

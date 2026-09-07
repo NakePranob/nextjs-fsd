@@ -8,11 +8,13 @@
 // below is the parts of a create-next-app project this CLI actually reads.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
+import { createRequire } from "node:module";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
 const CLI = path.join(import.meta.dirname, "..", "bin", "nextjs-fsd.js");
+const TSC = createRequire(import.meta.url).resolve("typescript/bin/tsc");
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "nextjs-fsd-smoke-"));
 
 let failures = 0;
@@ -91,7 +93,11 @@ function fixture(dir, { srcApp = false, lockfile } = {}) {
 function typecheck(dir, label) {
   const cliRoot = path.join(import.meta.dirname, "..");
   const modules = path.join(dir, "node_modules");
-  if (!fs.existsSync(modules)) fs.symlinkSync(path.join(cliRoot, "node_modules"), modules, "dir");
+  if (!fs.existsSync(modules)) {
+    // "junction" on Windows: a directory symlink there needs elevation or
+    // Developer Mode, a junction needs neither. Both want an absolute target.
+    fs.symlinkSync(path.join(cliRoot, "node_modules"), modules, process.platform === "win32" ? "junction" : "dir");
+  }
 
   // Next writes route-prop types into .next/types during a build; declared
   // here so a typecheck does not need a build to have happened first.
@@ -129,13 +135,21 @@ function typecheck(dir, label) {
 
   check(`generated TypeScript compiles (${label})`, () => {
     try {
-      execFileSync(path.join(cliRoot, "node_modules", ".bin", "tsc"), ["-p", "tsconfig.typecheck.json"], {
+      // node + TypeScript's own entry point, not node_modules/.bin/tsc: that
+      // shim is an extensionless shell script, which execFileSync cannot run
+      // on Windows (the runnable one there is tsc.CMD). Resolving the .js and
+      // handing it to this node works the same way everywhere.
+      execFileSync(process.execPath, [TSC, "-p", "tsconfig.typecheck.json"], {
         cwd: dir,
         encoding: "utf8",
         stdio: ["ignore", "pipe", "pipe"],
       });
     } catch (error) {
-      throw new Error(`tsc reported:\n${(error.stdout ?? "").trim() || (error.stderr ?? "").trim()}`);
+      // Both streams are empty when the spawn itself failed rather than the
+      // compile — reporting only them turned "could not run tsc" into a
+      // blank "tsc reported:" that named nothing.
+      const output = `${error.stdout ?? ""}${error.stderr ?? ""}`.trim();
+      throw new Error(`tsc reported:\n${output || `(no output) ${error.code ?? ""} ${error.message}`.trim()}`);
     }
   });
 }
