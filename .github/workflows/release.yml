@@ -61,12 +61,13 @@ jobs:
       - run: pnpm run verify
       - run: pnpm run test:integration
 
+      # Trusted Publishing exchanges the OIDC token for a short-lived
+      # registry credential, and that only exists in npm 11.5.1 and later.
+      # Node 22 still ships npm 10.x, which fails with ENEEDAUTH.
+      - run: npm install -g npm@latest
+
       - name: Publish from the verified tag
         run: npm publish --provenance --access public
-        env:
-          # Optional fallback. With npm Trusted Publishing configured, OIDC is
-          # used instead and no long-lived token is needed.
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Create the GitHub Release if it does not exist
         env:
