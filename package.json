@@ -21,11 +21,12 @@
     "build": "tsc",
     "dev": "tsc --watch",
     "test": "node --test tests/*.test.mjs && node scripts/smoke-test.mjs",
-    "verify": "pnpm run build && pnpm run test",
-    "prepack": "rm -rf dist && pnpm run build",
     "test:smoke": "node scripts/smoke-test.mjs",
     "test:integration": "node scripts/integration-test.mjs",
-    "prepublishOnly": "pnpm run verify"
+    "verify": "pnpm run build && pnpm run test",
+    "release:check": "node scripts/check-release.mjs",
+    "prepack": "rm -rf dist && pnpm run build",
+    "prepublishOnly": "pnpm run release:check && pnpm run verify"
   },
   "keywords": [
     "nextjs",

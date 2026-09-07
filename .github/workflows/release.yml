@@ -1,0 +1,83 @@
+name: release
+
+on:
+  # Git is the release source of truth. A package can only be published from an
+  # explicitly pushed vX.Y.Z tag that points at the matching package.json.
+  push:
+    tags:
+      - "v*.*.*"
+  # Lets a failed publish be retried (a misconfigured trusted publisher, a
+  # registry outage) without inventing another commit or tag.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing release tag to publish, for example v0.1.0"
+        required: true
+        type: string
+
+concurrency:
+  group: release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: npm-release
+    permissions:
+      # contents: write to create the GitHub Release; id-token: write for the
+      # OIDC token npm Trusted Publishing and --provenance use.
+      contents: write
+      id-token: write
+    env:
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+          # Unshallow, because the release check reads tag objects and compares
+          # them against HEAD.
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+          # npm recommends publishing without a dependency cache.
+
+      # The integration gate below drives a real bun project.
+      - uses: oven-sh/setup-bun@v2
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Check the tag against package.json
+        run: pnpm run release:check -- "$RELEASE_TAG"
+
+      # The same gate CI runs, re-run against the tagged tree rather than
+      # trusted from the branch: a tag can point anywhere, including at a
+      # commit CI never saw.
+      - run: pnpm run verify
+      - run: pnpm run test:integration
+
+      - name: Publish from the verified tag
+        run: npm publish --provenance --access public
+        env:
+          # Optional fallback. With npm Trusted Publishing configured, OIDC is
+          # used instead and no long-lived token is needed.
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Create the GitHub Release if it does not exist
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "GitHub Release $RELEASE_TAG already exists"
+          else
+            gh release create "$RELEASE_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --verify-tag \
+              --title "$RELEASE_TAG" \
+              --generate-notes
+          fi
