@@ -1,0 +1,61 @@
+import { describe, expect, test } from "bun:test";
+import type { AxiosAdapter } from "axios";
+
+import { createApiClient } from "./client";
+import { ApiError } from "./api-error";
+import { setAccessToken } from "{{alias}}/shared/auth/access-token";
+
+/**
+ * The two rules in the response interceptor that fail silently in a browser:
+ * a refresh storm logs the user out mid-session, and refreshing a login 401
+ * spends the cookie of whoever is already signed in. Both are testable only
+ * because createApiClient takes config — the adapter below stands in for the
+ * network.
+ */
+function stubAdapter(handle: (url: string) => { status: number; data?: unknown }): {
+  adapter: AxiosAdapter;
+  calls: string[];
+} {
+  const calls: string[] = [];
+  const adapter: AxiosAdapter = async (config) => {
+    const url = config.url ?? "";
+    calls.push(url);
+    const { status, data } = handle(url);
+    const response = { data, status, statusText: "", headers: {}, config } as never;
+    if (status >= 400) throw Object.assign(new Error(`HTTP ${status}`), { isAxiosError: true, config, response });
+    return response;
+  };
+  return { adapter, calls };
+}
+
+describe("api client", () => {
+  test("refreshes once for concurrent 401s, then replays both", async () => {
+    setAccessToken("stale");
+    let refreshed = false;
+    const { adapter, calls } = stubAdapter((url) => {
+      if (url === "/auth/refresh") {
+        refreshed = true;
+        return { status: 200, data: { access_token: "fresh" } };
+      }
+      return refreshed ? { status: 200, data: { ok: true } } : { status: 401 };
+    });
+
+    const { api } = createApiClient({ adapter });
+    const results = await Promise.all([api.get("/a"), api.get("/b")]);
+
+    expect(results.every((response) => response.status === 200)).toBe(true);
+    expect(calls.filter((url) => url === "/auth/refresh")).toHaveLength(1);
+  });
+
+  test("does not refresh a 401 from /auth/*", async () => {
+    setAccessToken(null);
+    const { adapter, calls } = stubAdapter(() => ({ status: 401, data: { error: { code: "AUTH_INVALID_CREDENTIALS" } } }));
+
+    const { api } = createApiClient({ adapter });
+    const error = await api.post("/auth/login", {}).catch((thrown) => thrown);
+
+    expect(error).toBeInstanceOf(ApiError);
+    expect((error as ApiError).code).toBe("AUTH_INVALID_CREDENTIALS");
+    expect(calls).toEqual(["/auth/login"]);
+  });
+});

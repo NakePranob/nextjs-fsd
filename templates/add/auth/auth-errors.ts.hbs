@@ -1,0 +1,22 @@
+import { commonErrorCatalog, resolveApiError, type ErrorCatalog } from "{{alias}}/shared/api";
+
+/**
+ * Codes the auth surface owns. TODO: match the codes your API actually raises
+ * — these are the common ones, and an unmapped code falls through to the
+ * caller's fallback sentence rather than breaking anything.
+ */
+export const authErrorCatalog: ErrorCatalog = {
+{{authCatalogEntries}}
+};
+
+/**
+ * Pass this to `<FormError catalogs={...}>` on an auth screen. Auth first,
+ * then the codes every endpoint shares — a screen that needs to reword one
+ * code puts its own catalog in front.
+ */
+export const authErrorCatalogs: readonly ErrorCatalog[] = [authErrorCatalog, commonErrorCatalog];
+
+/** For auth copy outside a `<FormError>` — a toast, a heading, a redirect reason. */
+export function resolveAuthError(error: unknown, fallback = "{{copy.genericError}}"): string {
+  return resolveApiError(error, { catalogs: authErrorCatalogs, fallback });
+}

@@ -1,0 +1,22 @@
+import { commonErrorCatalog, resolveApiError, type ErrorCatalog } from "{{alias}}/shared/api";
+
+/**
+ * Machine codes this page's own endpoints answer with, mapped to the sentence
+ * a user should read.
+ *
+ * One catalog per domain that owns the codes, never one global map: the domain
+ * that raises a code is the only place that knows what it means to a user, and
+ * a single map turns into a merge conflict magnet the moment two features grow
+ * at once.
+ */
+export const {{camel}}ErrorCatalog: ErrorCatalog = {
+  // "{{screaming}}_NOT_FOUND": "…",
+};
+
+/** Pass to `<FormError catalogs={...}>`. Most specific first. */
+export const {{camel}}ErrorCatalogs: readonly ErrorCatalog[] = [{{camel}}ErrorCatalog, commonErrorCatalog];
+
+/** For copy outside a `<FormError>` — a toast, a heading, a redirect reason. */
+export function resolve{{pascal}}Error(error: unknown, fallback = "{{copy.genericError}}"): string {
+  return resolveApiError(error, { catalogs: {{camel}}ErrorCatalogs, fallback });
+}

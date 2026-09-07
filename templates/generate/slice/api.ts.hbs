@@ -1,0 +1,42 @@
+"use client";
+
+import { useMutation, useQuery, useQueryClient, type UseQueryResult } from "@tanstack/react-query";
+
+import { ApiError, api } from "{{alias}}/shared/api";
+
+/**
+ * The record this slice is about. TODO: replace with the shape the API
+ * actually answers.
+ *
+ * Named `{{pascal}}Record` rather than `{{pascal}}` so it can share a public API
+ * with the `{{pascal}}` component in ui/ — one `index.ts` cannot re-export two
+ * different things under one name, and a type nobody can import through the
+ * slice's public API is a type nobody can annotate against without breaking
+ * the import boundary.
+ */
+export type {{pascal}}Record = { id: string };
+
+export const {{camel}}Key = ["{{name}}"] as const;
+
+// Always through `api` — a bare fetch skips the bearer token, the
+// single-flight 401 refresh, and the conversion into ApiError.
+export function use{{pascal}}Query(): UseQueryResult<{{pascal}}Record[], ApiError> {
+  return useQuery<{{pascal}}Record[], ApiError>({
+    queryKey: {{camel}}Key,
+    queryFn: () => api.get<{{pascal}}Record[]>("/{{name}}").then((response) => response.data),
+  });
+}
+
+/**
+ * A write invalidates the keys it affected rather than writing the new value
+ * into the cache by hand — unless the response actually carries the whole
+ * object, the server is still the only thing that knows what got stored
+ * (generated ids, defaults, computed fields).
+ */
+export function useCreate{{pascal}}() {
+  const queryClient = useQueryClient();
+  return useMutation<{{pascal}}Record, ApiError, Omit<{{pascal}}Record, "id">>({
+    mutationFn: (input) => api.post<{{pascal}}Record>("/{{name}}", input).then((response) => response.data),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: {{camel}}Key }),
+  });
+}

@@ -1,0 +1,30 @@
+import { ApiError } from "./api-error";
+import type { ErrorCatalog } from "./error-catalog";
+
+export type ResolveApiErrorOptions = {
+  /** Searched in order — first hit wins, so put the most specific first. */
+  catalogs?: readonly ErrorCatalog[];
+  fallback: string;
+};
+
+/**
+ * Turns anything a failed call can throw into one sentence, resolved from the
+ * catalogs the calling domain owns.
+ *
+ * `error.message` is deliberately never used as UI copy: the wording is a
+ * backend implementation detail that changes without anyone here noticing, and
+ * it is written for a developer reading a log. An unmapped code is a gap in a
+ * catalog, and a fallback that names the action that failed
+ * ("{{copy.saveFailed}}") is more useful to the user than a literal backend
+ * message would have been anyway.
+ */
+export function resolveApiError(error: unknown, { catalogs = [], fallback }: ResolveApiErrorOptions): string {
+  if (!(error instanceof ApiError)) return fallback;
+
+  for (const catalog of catalogs) {
+    const message = catalog[error.code];
+    if (message) return message;
+  }
+
+  return fallback;
+}

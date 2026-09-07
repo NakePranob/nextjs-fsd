@@ -1,0 +1,19 @@
+/**
+ * A catalog maps the API's stable machine codes onto UI copy. One catalog per
+ * domain that owns those codes, never one global map: the domain that raises a
+ * code is the only place that knows what it means to a user, and a single map
+ * turns into a merge conflict magnet the moment two features grow at once.
+ */
+export type ErrorCatalog = Readonly<Record<string, string>>;
+
+/**
+ * Codes any endpoint can answer with, plus the two `toApiError` mints
+ * client-side when the request never reached an answer at all.
+ *
+ * Every other catalog composes on top of this one, so a domain catalog only
+ * has to carry what is genuinely its own — generate one with
+ * `nextjs-fsd generate page <name> --errors`.
+ */
+export const commonErrorCatalog: ErrorCatalog = {
+{{commonCatalogEntries}}
+};

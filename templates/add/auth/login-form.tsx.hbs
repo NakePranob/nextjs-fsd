@@ -1,0 +1,48 @@
+"use client";
+
+import { useRouter } from "next/navigation";
+import { type FormEvent } from "react";
+
+import { authErrorCatalogs, useLogin } from "{{alias}}/shared/auth";
+import { FormError } from "{{alias}}/shared/ui";
+
+const field = "rounded-md border border-black/15 px-3 py-2 text-sm dark:border-white/20";
+
+export function LoginForm() {
+  const login = useLogin();
+  const router = useRouter();
+
+  function onSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    login.mutate(
+      { email: String(form.get("email") ?? ""), password: String(form.get("password") ?? "") },
+      { onSuccess: () => router.replace("/") },
+    );
+  }
+
+  return (
+    // Native HTML validation only: `required`/`type="email"` catch the obvious
+    // mistakes before a round trip, and the API re-validates every field
+    // anyway. Swap in a schema library once a form here has rules the browser
+    // cannot express.
+    <form onSubmit={onSubmit} className="flex flex-col gap-4">
+      <FormError error={login.error} catalogs={authErrorCatalogs} fallback="{{copy.signInFailed}}" />
+      <label className="flex flex-col gap-1.5 text-sm">
+        {{copy.email}}
+        <input name="email" type="email" required autoComplete="email" className={field} />
+      </label>
+      <label className="flex flex-col gap-1.5 text-sm">
+        {{copy.password}}
+        <input name="password" type="password" required autoComplete="current-password" className={field} />
+      </label>
+      <button
+        type="submit"
+        disabled={login.isPending}
+        className="mt-2 rounded-md bg-foreground px-3 py-2 text-sm text-background disabled:opacity-60"
+      >
+        {login.isPending ? "{{copy.signingIn}}" : "{{copy.signIn}}"}
+      </button>
+    </form>
+  );
+}

@@ -1,0 +1,10 @@
+"use client";
+
+import { useState } from "react";
+
+/** State this slice owns and that never leaves the browser. Anything that
+ *  comes from the API belongs in api/ as a TanStack Query hook instead. */
+export function use{{pascal}}() {
+  const [state, setState] = useState<string | null>(null);
+  return { state, setState };
+}

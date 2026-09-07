@@ -1,0 +1,19 @@
+// The access token lives in a module variable and nowhere else.
+//
+// The API returns it in the login/refresh response body and should keep the
+// refresh token in an httpOnly cookie, so there is nothing to persist here: a
+// reload starts with no token and the first 401 spends the cookie on a new
+// one. localStorage would only make the token readable by any injected script.
+//
+// This file imports nothing on purpose — shared/api reads it inside the
+// request interceptor and shared/auth writes it after login, so keeping it
+// dependency-free is what stops those two from importing each other.
+let accessToken: string | null = null;
+
+export function getAccessToken(): string | null {
+  return accessToken;
+}
+
+export function setAccessToken(token: string | null): void {
+  accessToken = token;
+}

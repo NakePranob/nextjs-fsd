@@ -1,0 +1,167 @@
+---
+name: nextjs-fsd
+description: >
+  Use whenever the user asks to add, create, scaffold, or wire up a new page,
+  screen, route, feature, entity, layout, or shared route shell in THIS
+  project — including indirect requests such as "add a settings screen", "let
+  staff approve loans", "put the dashboard behind login", or "show a proper
+  message when the API fails". This project is organized with Feature-Sliced
+  Design and has a nextjs-fsd.config.json at its root; check for that file
+  before assuming this applies. Also use when adding API error handling or
+  authentication for the first time. Do NOT use for business logic or markup
+  inside a file the CLI already generated, for styling, for a bug fix or
+  refactor, or for a project without nextjs-fsd.config.json.
+---
+
+# nextjs-fsd
+
+Use this skill for the FSD surface only: which directory a new thing goes in,
+and how it is imported. Once a slice exists, its content — markup, business
+rules, request shapes — is the engineer's work.
+
+Create slices with the CLI rather than by hand, so the route file, the
+`index.ts` public API, the `"use client"` placement, and the segment layout
+stay consistent. Hand-written slices are exactly what the two linters then
+report.
+
+This file is emitted at `.claude/skills/nextjs-fsd/SKILL.md`. Agents that do
+not load `.claude/skills` should follow the root `AGENTS.md`, which points at
+[docs/fsd.md](../../../docs/fsd.md) — the fuller convention, and the source of
+truth if this file and it ever disagree.
+
+**FSD methodology questions are not this skill's job.** Whether a thing should
+be an entity at all, when to extract from a page, cross-import and `@x`
+patterns, how strict to be — that is the `feature-sliced-design` skill
+(fsd.how). This one only covers driving the generator in this repo.
+
+## When to use this skill
+
+- A new page, screen or route is requested, even without the word "page".
+- A new reusable feature or business object is requested, even without the
+  words "feature" or "entity".
+- Several routes need shared chrome (a sidebar, an auth card) → a layout.
+- The project needs API error handling or auth for the first time.
+- An existing slice needs a segment it does not have yet (state, requests,
+  helpers, an error catalog).
+
+Examples that all use this skill:
+
+- "add a settings screen" → `generate page settings`
+- "the dashboard should require login" → `generate page dashboard --auth`
+- "admin pages need a shared sidebar" → `generate layout admin`
+- "loans need to be reusable across screens" → `generate slice entities loan`
+- "show a real message when saving fails" → `add error-handling`, then
+  `--errors` on the slice that owns the failing call
+
+## When not to use it
+
+- Writing the actual markup, state, or request body inside a generated file
+- Styling, Tailwind theme edits, or shadcn component customisation
+- Bug fixes, refactors, or dependency work
+- Deciding whether a layer *should* exist — that is the FSD skill
+- Any repository without nextjs-fsd.config.json at its root
+
+## Before running the CLI
+
+1. Read `nextjs-fsd.config.json`. `features.errorHandling` and `features.auth`
+   decide which flags are even legal, `appDir` says whether routes live in
+   `app/` or `src/app/`, and `locale` says which language generated copy is
+   written in.
+2. Look for the slice first. `{{srcDir}}/_pages/`, `{{srcDir}}/features/`,
+   `{{srcDir}}/entities/` — a name that already exists means you are extending,
+   not creating, and the flags differ.
+3. Check `{{appDir}}/` for an existing route before choosing `--route`. A page
+   routed from a group is not where the default would look.
+4. Confirm the work is on a branch you may commit to (`git status -sb`) and
+   preserve unrelated changes.
+
+## Commands
+
+Run from the project root. **Pass every value as a flag** — an omitted value
+opens a prompt, and in a non-interactive shell that exits 1 without writing
+anything.
+
+~~~bash
+nextjs-fsd generate page <name> [--route <path>] [--no-route] [--client] [--auth] [--errors] [--defaults]
+nextjs-fsd generate slice <features|entities|widgets> <name> [--segments ui,model,api,lib] [--errors] [--defaults]
+nextjs-fsd generate layout <name> [--route <path>] [--no-route] [--defaults]
+nextjs-fsd add error-handling [-y] [--no-install]
+nextjs-fsd add auth [-y] [--no-install]
+nextjs-fsd config show
+~~~
+
+`--defaults` answers every remaining question, so scripted and agent use needs
+`--defaults` (or the full set of flags) on every generate command.
+
+Feature gates, which fail loudly rather than generating something broken:
+
+- `--auth` requires `features.auth` → run `add auth` first
+- `--errors` and the `api` segment require `features.errorHandling` →
+  run `add error-handling` first
+- `add auth` installs error handling itself if it is missing; do not run both
+
+## Extending, not rewriting
+
+**Re-run the same command to add to something that exists.** Do not hand-write
+the file, and do not delete the slice to regenerate it.
+
+~~~bash
+nextjs-fsd generate slice features checkout --segments ui           # ui/ only
+nextjs-fsd generate slice features checkout --segments ui,model     # adds model/
+nextjs-fsd generate page dashboard --errors --defaults              # adds the catalog
+~~~
+
+Only the missing files are written; new exports are appended to the slice's
+`index.ts`; every existing file is left exactly as it is. If there is nothing
+to add, the command says so and writes nothing — that is the expected answer,
+not a failure to work around.
+
+Two consequences worth knowing:
+
+- The page component is an existing file, so a leaf added later is not rendered
+  by anything yet. The command prints the one import line to add; add it.
+- A page already routed from elsewhere does not get a second route file. Two
+  `page.tsx` resolving to one URL is a Next.js build error.
+
+## Contracts the generated code relies on
+
+Breaking one of these is silent — the build passes and the app is wrong.
+
+- **A route file re-exports the page *and* its `metadata`.** `export { X as
+  default } from "..."` alone drops the page title with no error.
+- **`"use client"` goes on the leaf, not the page.** A page component stays a
+  server component; state, effects and events live in a `ui/<thing>.tsx`.
+- **Imports point downwards, and a slice is entered through its `index.ts`.**
+  `{{alias}}/features/x`, never `{{alias}}/features/x/ui/x`. Inside a slice the
+  import is relative.
+- **Never render `error.message` as UI copy.** Add the code to the domain's own
+  catalog (`model/<name>-errors.ts`) and let the fallback name the action that
+  failed. A backend message is written for a log.
+- **One catalog per domain, never one global map.** `generate ... --errors`
+  creates it in the right place.
+- **The access token stays in the module variable** in
+  `{{srcDir}}/shared/auth/access-token.ts`. Never move it to `localStorage`, and
+  never remove the single-flight guard in `shared/api/client.ts` — a backend
+  that rotates refresh tokens logs the user out mid-session without it.
+- **`{{appDir}}/` composes pages, not features.** ESLint enforces this one.
+
+## Verification
+
+After generating and filling in a slice:
+
+~~~bash
+{{lintCommand}}      # eslint (per-file boundary) + steiger (whole-tree)
+{{packageManager}} run build
+~~~
+
+ESLint reports a wrong-way or slice-internal import at the file. steiger
+reports what one file cannot show. `fsd/insignificant-slice` on a brand-new
+slice means nothing imports it yet — either wire it up or inline it back into
+its single consumer; it is the linter working, not a false positive.
+
+Where the CLI wrote a `client.test.ts`, run the project's test command too. Do
+not delete that test to make a change pass: the single-flight 401 refresh and
+the no-refresh-on-`/auth/*` rule are the two things in this codebase that fail
+silently in a browser.
+
+Report the exact output, and say plainly which generated TODOs are still TODOs.

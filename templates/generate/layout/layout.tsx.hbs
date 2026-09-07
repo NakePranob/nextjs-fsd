@@ -1,0 +1,20 @@
+import type { ReactNode } from "react";
+
+/**
+ * Shell for the {{name}} routes.
+ *
+ * Takes a plain `{ children }` rather than `LayoutProps<...>`: Next emits no
+ * route-props type for a route group, since a group contributes nothing to the
+ * URL. Change it to `LayoutProps<"/{{name}}">` if you point this at a real path
+ * segment instead.
+ *
+ * A layout is composition, not a page — put anything with its own state or
+ * data in a slice and render that here.
+ */
+export function {{pascal}}Layout({ children }: { children: ReactNode }) {
+  return (
+    <div className="flex min-h-svh flex-col">
+      <main className="flex-1 p-6">{children}</main>
+    </div>
+  );
+}

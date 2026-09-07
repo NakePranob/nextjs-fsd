@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  # Fast and offline: tsc, the patcher unit tests, and the smoke test — which
+  # type-checks generated output against this repo's own node_modules.
+  verify:
+    strategy:
+      fail-fast: false
+      matrix:
+        # Windows is in the matrix because every path this CLI writes is built
+        # by hand: route files use posix joins, the app directory is compared
+        # as a string, and findRouteFor splits on path.sep. None of that is
+        # exercised by developing on macOS.
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run verify
+
+  # Slow and networked: a real create-next-app, a real install, a real
+  # `next build`. Catches what the smoke test structurally cannot — a
+  # dependency range that does not resolve, or a Next.js release that changes
+  # behaviour under us. One OS is enough; this is about the toolchain, not paths.
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: oven-sh/setup-bun@v2
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run build
+      - run: pnpm run test:integration

@@ -1,0 +1,29 @@
+"use client";
+
+import { useRouter } from "next/navigation";
+import { useEffect } from "react";
+
+import { useSession } from "./session";
+
+/**
+ * Session for a page that needs one, sending anonymous visitors to /login.
+ *
+ * UX only — the real gate is the API's own auth middleware, which every
+ * request passes through regardless of what the browser rendered. It cannot
+ * move into `proxy.ts` (Next 16's renamed middleware) either: the refresh
+ * cookie belongs to the API's origin, so the Next server never sees it and
+ * has nothing to check.
+ *
+ * No return-to-url: add a `?next=` round trip when deep links into protected
+ * pages start mattering.
+ */
+export function useRequireSession() {
+  const session = useSession();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (session.isError) router.replace("/login");
+  }, [session.isError, router]);
+
+  return session;
+}

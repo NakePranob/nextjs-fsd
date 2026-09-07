@@ -1,0 +1,75 @@
+"use client";
+
+import { useMutation, useQuery, useQueryClient, type QueryClient, type UseQueryResult } from "@tanstack/react-query";
+
+import { ApiError, api } from "{{alias}}/shared/api";
+
+import { setAccessToken } from "./access-token";
+
+/** GET /users/me. TODO: match the fields your API actually returns. */
+export type Session = {
+  id: string;
+  email: string;
+  name: string;
+  role: string;
+};
+
+export type LoginInput = { email: string; password: string };
+
+/** Body of login/refresh — the refresh token is an httpOnly cookie, not here. */
+type AuthTokens = { access_token: string; token_type: string; expires_in: number };
+
+export const sessionKey = ["session"] as const;
+
+/**
+ * The signed-in user, or an error when there is none.
+ *
+ * On a fresh page load there is no access token yet, so this 401s once and the
+ * client's response interceptor spends the refresh cookie before retrying —
+ * meaning this hook doubles as the session bootstrap. `retry: false` because
+ * that recovery already happened one layer down: a 401 that reaches here means
+ * the cookie is gone too, and asking again will not help.
+ */
+export function useSession(): UseQueryResult<Session, ApiError> {
+  return useQuery<Session, ApiError>({
+    queryKey: sessionKey,
+    queryFn: () => api.get<Session>("/users/me").then((response) => response.data),
+    retry: false,
+    staleTime: 5 * 60_000,
+  });
+}
+
+export function useLogin() {
+  const queryClient = useQueryClient();
+  return useMutation<void, ApiError, LoginInput>({
+    mutationFn: async (input) => {
+      const { data } = await api.post<AuthTokens>("/auth/login", input);
+      setAccessToken(data.access_token);
+      // Refetch rather than write a session object we do not have: the
+      // response carries tokens only, so /users/me stays the single source of
+      // the user's name and role.
+      await queryClient.invalidateQueries({ queryKey: sessionKey });
+    },
+  });
+}
+
+export function useLogout() {
+  const queryClient = useQueryClient();
+  return useMutation<void, ApiError, void>({
+    // Server-side too, not just locally: /auth/logout revokes the refresh
+    // token and clears the cookie, otherwise the next reload silently signs
+    // the user back in.
+    mutationFn: () => api.post("/auth/logout").then(() => undefined),
+    onSettled: () => endSessionLocally(queryClient),
+  });
+}
+
+/**
+ * Ends the session on this device even when the server call failed — the user
+ * asked to leave. `clear()`, not `remove(sessionKey)`: every other cached
+ * query holds the previous user's data.
+ */
+function endSessionLocally(queryClient: QueryClient): void {
+  setAccessToken(null);
+  queryClient.clear();
+}

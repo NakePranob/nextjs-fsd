@@ -1,0 +1,31 @@
+@import "tailwindcss";
+
+/* This file lives in the FSD app layer, not next to the routes, so name the
+   trees Tailwind has to scan for class names explicitly instead of relying on
+   where auto-detection decides the project root is. */
+@source "{{cssSourceApp}}";
+@source "{{cssSourceSrc}}";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+}
+
+:root {
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+}
+
+.dark {
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+}
+
+@layer base {
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+  }
+}

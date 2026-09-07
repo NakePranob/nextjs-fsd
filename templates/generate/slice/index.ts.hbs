@@ -1,0 +1,15 @@
+{{#if segments.ui}}
+export { {{pascal}} } from "./ui/{{name}}";
+{{/if}}
+{{#if segments.model}}
+export { use{{pascal}} } from "./model/{{name}}";
+{{/if}}
+{{#if segments.api}}
+export { {{camel}}Key, useCreate{{pascal}}, use{{pascal}}Query, type {{pascal}}Record } from "./api/{{name}}";
+{{/if}}
+{{#if segments.lib}}
+export { format{{pascal}} } from "./lib/{{name}}";
+{{/if}}
+{{#if segments.errors}}
+export { {{camel}}ErrorCatalog, {{camel}}ErrorCatalogs, resolve{{pascal}}Error } from "./model/{{name}}-errors";
+{{/if}}

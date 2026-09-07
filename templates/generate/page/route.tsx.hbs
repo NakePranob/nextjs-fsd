@@ -1,0 +1,3 @@
+// Routing only — `metadata` travels with the component, because a route file
+// that re-exports `default` alone silently drops the page's title.
+export { {{pascal}}Page as default, metadata } from "{{alias}}/_pages/{{name}}";

@@ -1,0 +1,69 @@
+import axios from "axios";
+
+/**
+ * Error envelope the API uses on failure — one `error` object with a stable
+ * machine code. Adjust the field names here if your backend words them
+ * differently; this is the only place that reads the wire format.
+ */
+type ErrorEnvelope = {
+  error?: {
+    code?: string;
+    message?: string;
+    details?: unknown;
+    request_id?: string;
+  };
+};
+
+/**
+ * Normalised failure for anything crossing the API boundary. Callers branch on
+ * `code`/`status`, never on axios internals — that is the whole point of
+ * converting here, in the response interceptor, instead of leaking
+ * `AxiosError` into hooks and components.
+ */
+export class ApiError extends Error {
+  constructor(
+    readonly code: string,
+    message: string,
+    readonly status: number,
+    readonly details?: unknown,
+    readonly requestId?: string,
+  ) {
+    super(message);
+    this.name = "ApiError";
+  }
+
+  /**
+   * Per-field messages for a VALIDATION_ERROR. Many backends only send these
+   * outside production, so every caller has to cope with this being
+   * undefined — never build UI that depends on a field map being present.
+   */
+  get fieldErrors(): Record<string, string> | undefined {
+    if (this.code !== "VALIDATION_ERROR") return undefined;
+    const { details } = this;
+    if (!details || typeof details !== "object") return undefined;
+    const entries = Object.entries(details as Record<string, unknown>).filter(
+      ([, value]) => typeof value === "string",
+    );
+    return entries.length > 0 ? (Object.fromEntries(entries) as Record<string, string>) : undefined;
+  }
+}
+
+export function toApiError(error: unknown): ApiError {
+  if (error instanceof ApiError) return error;
+
+  if (axios.isAxiosError(error)) {
+    const status = error.response?.status ?? 0;
+    const envelope = (error.response?.data as ErrorEnvelope | undefined)?.error;
+    return new ApiError(
+      // status 0 means the request never got an answer — a dead API, DNS, or a
+      // CORS rejection all land here, and they read the same to the user.
+      envelope?.code ?? (status === 0 ? "NETWORK" : "UNKNOWN"),
+      envelope?.message ?? error.message,
+      status,
+      envelope?.details,
+      envelope?.request_id,
+    );
+  }
+
+  return new ApiError("UNKNOWN", error instanceof Error ? error.message : String(error), 0);
+}

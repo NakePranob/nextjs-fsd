@@ -1,0 +1,17 @@
+"use client";
+{{#if auth}}
+
+import { useRequireSession } from "{{alias}}/shared/auth";
+{{/if}}
+
+export function {{pascal}}Content() {
+{{#if auth}}
+  // UX only. The API's own auth middleware is the real gate and it runs on
+  // every request no matter what the browser rendered, so never treat a
+  // rendered page as proof of a session.
+  const session = useRequireSession();
+  if (session.isPending || session.isError) return <p className="text-sm">{{copy.loading}}</p>;
+
+{{/if}}
+  return <p className="text-sm">{{copy.todo}}</p>;
+}

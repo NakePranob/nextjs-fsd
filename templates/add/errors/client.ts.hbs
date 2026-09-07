@@ -1,0 +1,91 @@
+import axios, { type CreateAxiosDefaults, type InternalAxiosRequestConfig } from "axios";
+
+import { getAccessToken, setAccessToken } from "{{alias}}/shared/auth/access-token";
+import { API_URL } from "{{alias}}/shared/config";
+
+import { toApiError } from "./api-error";
+
+const REFRESH_PATH = "/auth/refresh";
+
+type RetriableConfig = InternalAxiosRequestConfig & { _retried?: boolean };
+
+type AccessTokenResponse = { access_token: string };
+
+/**
+ * Builds the API client: bearer token in, normalised {@link ApiError} out, and
+ * one silent refresh attempt per failed request.
+ *
+ * A factory rather than a bare module instance so a test can pass its own
+ * adapter — the refresh handling below is the part worth pinning down.
+ */
+export function createApiClient(defaults: CreateAxiosDefaults = {}) {
+  // withCredentials so the browser attaches an httpOnly refresh cookie on the
+  // /auth/refresh call. Cross-origin by default (:3000 -> the API), which the
+  // API has to allow explicitly in its CORS config.
+  const config: CreateAxiosDefaults = { withCredentials: true, ...defaults };
+  const api = axios.create(config);
+  // Separate instance for the refresh call itself: on `api` it would hit the
+  // interceptor below and try to refresh its own 401, recursively.
+  const bare = axios.create(config);
+
+  let inFlight: Promise<string | null> | null = null;
+
+  /**
+   * Trades the refresh cookie for a new access token. Single-flight: every
+   * request that 401s while one refresh is running awaits that same promise.
+   * A backend that rotates the refresh token on use would otherwise see two
+   * concurrent calls race, and one would invalidate the other's cookie —
+   * logging the user out mid-session.
+   */
+  function refreshAccessToken(): Promise<string | null> {
+    inFlight ??= bare
+      .post<AccessTokenResponse>(REFRESH_PATH)
+      .then(
+        (response) => {
+          const token = response.data.access_token;
+          setAccessToken(token);
+          return token;
+        },
+        () => {
+          // No usable cookie: drop the stale token so the next request goes
+          // out unauthenticated instead of retrying a dead one forever.
+          setAccessToken(null);
+          return null;
+        },
+      )
+      .finally(() => {
+        inFlight = null;
+      });
+    return inFlight;
+  }
+
+  api.interceptors.request.use((request) => {
+    const token = getAccessToken();
+    if (token) request.headers.Authorization = `Bearer ${token}`;
+    return request;
+  });
+
+  api.interceptors.response.use(undefined, async (error: unknown) => {
+    const failed = axios.isAxiosError(error) ? (error.config as RetriableConfig | undefined) : undefined;
+    // A 401 from /auth/* is an answer, not an expired token: wrong password, a
+    // spent challenge, a dead reset link. Refreshing on those would spend the
+    // cookie of whoever is already signed in on this browser and still
+    // surface the same error.
+    const fromAuthEndpoint = failed?.url?.startsWith("/auth/") ?? false;
+
+    if (axios.isAxiosError(error) && error.response?.status === 401 && failed && !failed._retried && !fromAuthEndpoint) {
+      failed._retried = true;
+      const token = await refreshAccessToken();
+      if (token) {
+        failed.headers.Authorization = `Bearer ${token}`;
+        return api.request(failed);
+      }
+    }
+
+    throw toApiError(error);
+  });
+
+  return { api, refreshAccessToken };
+}
+
+export const { api, refreshAccessToken } = createApiClient({ baseURL: API_URL });

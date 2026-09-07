@@ -1,0 +1,17 @@
+{{#if needsClient}}
+"use client";
+
+{{/if}}
+{{#if segments.model}}
+import { use{{pascal}} } from "../model/{{name}}";
+
+{{/if}}
+export function {{pascal}}() {
+{{#if segments.model}}
+  const {{camel}} = use{{pascal}}();
+
+  return <p className="text-sm">{JSON.stringify({{camel}})}</p>;
+{{else}}
+  return <p className="text-sm">{{copy.todo}}</p>;
+{{/if}}
+}

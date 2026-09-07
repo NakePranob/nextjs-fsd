@@ -1,0 +1,18 @@
+import type { Metadata } from "next";
+
+import { LoginForm } from "./login-form";
+
+export const metadata: Metadata = { title: "{{copy.signIn}}" };
+
+// Server component — the form below is the only part that needs the browser.
+export function LoginPage() {
+  return (
+    <main className="mx-auto flex min-h-svh w-full max-w-sm flex-col justify-center gap-6 p-6">
+      <div className="flex flex-col gap-1">
+        <h1 className="text-2xl font-semibold">{{copy.signIn}}</h1>
+        <p className="text-sm opacity-70">{{copy.signInSubtitle}}</p>
+      </div>
+      <LoginForm />
+    </main>
+  );
+}

@@ -1,0 +1,22 @@
+import type { Metadata } from "next";
+{{#if hasContent}}
+import { {{pascal}}Content } from "./{{name}}-content";
+{{/if}}
+
+export const metadata: Metadata = { title: "{{title}}" };
+
+// Server component: no state, no effects, no browser API. Anything that needs
+// those goes in a "use client" leaf under ui/ so this page's whole tree does
+// not ship to the browser.
+export function {{pascal}}Page() {
+  return (
+    <div className="flex flex-col gap-6">
+      <h1 className="text-2xl font-semibold">{{title}}</h1>
+{{#if hasContent}}
+      <{{pascal}}Content />
+{{else}}
+      <p className="text-sm">{{copy.todo}}</p>
+{{/if}}
+    </div>
+  );
+}
