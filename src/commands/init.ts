@@ -57,7 +57,11 @@ export async function initProject(projectDir: string, opts: InitOptions): Promis
           ],
         })) as Locale));
 
-  const stylesheet = path.join(appDir, "globals.css");
+  // Posix, like every other relative path this CLI reports or stores: joining
+  // with `path.join` would print `src\app\globals.css` on Windows inside a
+  // file list where every other line uses `/`. `path.join(projectDir, ...)`
+  // below still normalises it for the filesystem.
+  const stylesheet = `${appDir}/globals.css`;
   const movesStylesheet = fs.existsSync(path.join(projectDir, stylesheet));
 
   if (!(opts.yes || opts.defaults)) {
