@@ -5,7 +5,7 @@ import pc from "picocolors";
 import { NO_TTY_MESSAGE, select } from "./prompts";
 import { initProject } from "./commands/init";
 import { generateLayout, generatePage, generateSlice } from "./commands/generate";
-import { addAuth, addErrorHandling } from "./commands/add";
+import { addAuth, addErrorHandling, addPrettier } from "./commands/add";
 import { setProjectLocale, showProjectConfig } from "./commands/config";
 import { isProjectDir, readConfig } from "./utils/config";
 import { parseLocale } from "./utils/copy";
@@ -171,9 +171,15 @@ async function runAddWizard(): Promise<void> {
         value: "auth",
         disabled: config.features.auth ? "— already installed" : false,
       },
+      {
+        name: "Prettier (Tailwind class sorting, a format script, and a check on lint)",
+        value: "prettier",
+        disabled: config.features.prettier ? "— already installed" : false,
+      },
     ],
   });
   if (target === "errors") await addErrorHandling({});
+  else if (target === "prettier") await addPrettier({});
   else await addAuth({});
 }
 
@@ -197,6 +203,19 @@ add
   .action(async (opts: { install?: boolean; yes?: boolean }) => {
     try {
       await addErrorHandling({ install: opts.install, yes: opts.yes });
+    } catch (err) {
+      fail(err);
+    }
+  });
+
+add
+  .command("prettier")
+  .description("add prettier with the Tailwind class-sorting plugin pointed at the moved globals.css, a format script, and a --check on lint")
+  .option("--no-install", "write the files but do not run the package manager")
+  .option("-y, --yes", "skip the confirmation summary")
+  .action(async (opts: { install?: boolean; yes?: boolean }) => {
+    try {
+      await addPrettier({ install: opts.install, yes: opts.yes });
     } catch (err) {
       fail(err);
     }

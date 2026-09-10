@@ -7,7 +7,7 @@ import { checkbox, confirm, input, select } from "../prompts";
 import { readConfig } from "../utils/config";
 import { copyFor } from "../utils/copy";
 import { normalizeRoute, resolveNaming, validateRoute, validateSliceName } from "../utils/naming";
-import { applyTemplates, renderTemplate, TemplateEntry } from "../utils/render";
+import { applyTemplates, renderTemplate, TemplateEntry, formatFiles } from "../utils/render";
 import { appendExport } from "../utils/project";
 import { report } from "./init";
 
@@ -301,6 +301,9 @@ export async function generateSlice(
         if (!written.includes(`${slice}/index.ts`)) written.push(`${slice}/index.ts`);
       }
     }
+    // Appended as text rather than rendered, so applyTemplates never formatted
+    // it — and `add prettier` puts a --check on lint.
+    await formatFiles(process.cwd(), [`${slice}/index.ts`]);
   }
 
   report(written);
@@ -481,6 +484,7 @@ export async function generateLayout(rawName: string | undefined, opts: LayoutOp
   if (appendExport(process.cwd(), `${layouts}/index.ts`, `export { ${naming.pascal}Layout } from "./${naming.name}-layout";`)) {
     written.push(`${layouts}/index.ts`);
   }
+  await formatFiles(process.cwd(), [`${layouts}/index.ts`]);
 
   report(written);
   if (opts.routeFile === false) {

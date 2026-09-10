@@ -49,12 +49,18 @@ in two pages while you are still unsure is the cheaper mistake.
 | | catches | when |
 |---|---|---|
 | **ESLint** (`eslint.fsd.mjs`) | this import points the wrong way, or reaches past a slice's `index.ts` | as you type, per file, in the editor |
-| **steiger** (`steiger.config.ts`) | a slice with no references, a layer sliced too finely, a segment named after its type, inconsistent naming | on demand, whole tree |
+| **steiger** (`steiger.config.ts`) | the same imports, plus a slice with no references, a layer sliced too finely, a segment named after its type, inconsistent naming | on demand, whole tree |
 
-A single file is enough to see a bad import, so that check belongs where you
-get it instantly. Nothing in one file can show that a slice has no consumers
-or that a layer has thirty slices — that needs the whole tree, which is what
-steiger walks.
+The overlap on imports is deliberate, not an oversight to clean up. steiger's
+`fsd/forbidden-imports`, `fsd/no-cross-imports` and `fsd/no-public-api-sidestep`
+do check the boundary — ESLint is not covering a gap in the plugin. It is
+covering a gap in *timing*: steiger walks the tree when you run it, and a rule
+you only meet in CI is a rule you have already built ten files on top of. Do
+not delete the ESLint half on the grounds that steiger repeats it.
+
+The other direction has no overlap at all: nothing in one file can show that a
+slice has no consumers or that a layer has thirty slices, so that half only
+works whole-tree.
 
 `eslint.fsd.mjs` has no dependencies of its own: the boundary is expressed
 with the core `no-restricted-imports` rule, and the layer order above is the

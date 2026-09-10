@@ -1,0 +1,7 @@
+# Prettier 3 already reads .gitignore, so .next/ and node_modules/ need no line
+# here. This file is only for tracked files that should keep their own shape.
+
+# `next dev` rewrites the top of AGENTS.md on every run, and the prose in
+# docs/ is wrapped by hand — reflowing it produces a diff on every format with
+# nothing in it. Prettier is here for code.
+*.md

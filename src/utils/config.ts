@@ -2,7 +2,7 @@ import path from "path";
 import fs from "fs-extra";
 import { PackageManager, ProjectConfig, ProjectFeatures } from "../types";
 import { Locale } from "./copy";
-import { detectPackageManager } from "./project";
+import { detectPackageManager, writeJson } from "./project";
 
 const CONFIG_FILE = "nextjs-fsd.config.json";
 export const CONFIG_SCHEMA_VERSION = 1;
@@ -16,7 +16,7 @@ export function isProjectDir(projectDir: string): boolean {
 }
 
 export function writeConfig(projectDir: string, config: ProjectConfig): void {
-  fs.writeJsonSync(configPath(projectDir), config, { spaces: 2 });
+  writeJson(configPath(projectDir), config);
 }
 
 /**
@@ -34,7 +34,43 @@ export function detectFeatures(projectDir: string, srcDir = "src"): ProjectFeatu
   return {
     errorHandling: has("shared/api/client.ts"),
     auth: has("shared/auth/session.ts"),
+    prettier: hasPrettierConfig(projectDir),
   };
+}
+
+/**
+ * Any prettier config counts, not only the `.prettierrc` this CLI writes.
+ *
+ * Writing a second config next to someone's `prettier.config.js` does not
+ * merge with it — prettier takes the first by precedence and silently ignores
+ * the rest, so `add prettier` has to refuse rather than half-apply.
+ */
+const PRETTIER_CONFIG_FILES = [
+  ".prettierrc",
+  ".prettierrc.json",
+  ".prettierrc.json5",
+  ".prettierrc.yaml",
+  ".prettierrc.yml",
+  ".prettierrc.js",
+  ".prettierrc.mjs",
+  ".prettierrc.cjs",
+  ".prettierrc.toml",
+  "prettier.config.js",
+  "prettier.config.mjs",
+  "prettier.config.cjs",
+  "prettier.config.ts",
+];
+
+export function hasPrettierConfig(projectDir: string): boolean {
+  if (PRETTIER_CONFIG_FILES.some((name) => fs.existsSync(path.join(projectDir, name)))) return true;
+  // A "prettier" key in package.json is a config too, and a common one.
+  const pkg = path.join(projectDir, "package.json");
+  if (!fs.existsSync(pkg)) return false;
+  try {
+    return "prettier" in (fs.readJsonSync(pkg) as Record<string, unknown>);
+  } catch {
+    return false;
+  }
 }
 
 export function readConfig(projectDir: string): ProjectConfig {

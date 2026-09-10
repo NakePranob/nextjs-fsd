@@ -69,6 +69,10 @@ for (const entry of MATRIX) {
   // The CLI installs on its own here — that is the point of this test.
   const steps = [
     ["init", "--locale", entry.locale, "--defaults"],
+    // Early on purpose. It puts `prettier --check .` on the lint script, so
+    // everything generated after it has to come out formatted — which is the
+    // thing worth proving, and only a real install and a real lint can.
+    ["add", "prettier", "-y"],
     ["add", "auth", "-y"],
     ["generate", "layout", "admin", "--defaults"],
     ["generate", "page", "dashboard", "--auth", "--route", "(admin)/dashboard", "--errors", "--defaults"],
@@ -103,6 +107,11 @@ for (const entry of MATRIX) {
   );
 
   const runner = entry.manager === "bun" ? "bunx" : "npx";
+  // This fixture is the test's own hand-written file, not the CLI's output —
+  // format it so `prettier --check .` below is checking generated code only.
+  run(runner, ["prettier", "--write", path.join("src", "_pages", "dashboard", "ui", "dashboard-content.tsx")], dir,
+      `${entry.name}: format the hand-written fixture`);
+
   if (run(runner, ["next", "build"], dir, `${entry.name}: next build`) !== null) ok(`${entry.name}: next build`);
   if (run(entry.manager === "bun" ? "bun" : "npm", ["run", "lint"], dir, `${entry.name}: lint`) !== null) {
     ok(`${entry.name}: lint`);

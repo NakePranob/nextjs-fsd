@@ -1,5 +1,6 @@
 import path from "path";
 import nodeFs from "fs";
+import { createRequire } from "module";
 import fs from "fs-extra";
 import Handlebars from "handlebars";
 
@@ -92,5 +93,48 @@ export async function applyTemplates(
     await fs.writeFile(outputPath, renderString(source, context));
     written.push(entry.output);
   }
+  await formatFiles(projectRoot, written);
   return written;
+}
+
+/**
+ * Runs the project's own prettier over the given files, if it has one.
+ *
+ * `add prettier` puts `prettier --check .` on the lint script, so from that
+ * point every generated file has to pass it — and keeping forty templates
+ * hand-matched to whatever printWidth a project chose is not a thing anyone
+ * can keep doing. The project's prettier, resolved from the project: a
+ * generator that formats with its own copy gets undone the moment the project
+ * runs its own.
+ *
+ * Also called by hand for the files the regex patchers edit after this —
+ * splicing `<Providers>` into a formatted layout.tsx un-formats it.
+ *
+ * Best-effort: a project can have the config and not yet the binary
+ * (`--no-install`), and failing a generate over cosmetics trades the wrong way
+ * round. Unformatted files are what lint is for.
+ */
+export async function formatFiles(projectRoot: string, files: string[]): Promise<void> {
+  let prettier: any;
+  try {
+    prettier = createRequire(path.join(projectRoot, "noop.js"))("prettier");
+  } catch {
+    return; // No prettier in this project. Nothing to be consistent with.
+  }
+
+  for (const file of files) {
+    const full = path.join(projectRoot, file);
+    try {
+      // getFileInfo, not just the extension: it applies .prettierignore and
+      // .gitignore, so a file the project excluded stays excluded.
+      const info = await prettier.getFileInfo(full, { ignorePath: [".gitignore", ".prettierignore"] });
+      if (info.ignored || !info.inferredParser) continue;
+      const config = await prettier.resolveConfig(full);
+      const source = await fs.readFile(full, "utf8");
+      await fs.writeFile(full, await prettier.format(source, { ...config, filepath: full }));
+    } catch {
+      // A file prettier cannot parse is worth seeing in lint, not worth
+      // aborting a generate over.
+    }
+  }
 }

@@ -17,6 +17,8 @@ export interface ProjectFeatures {
   errorHandling: boolean;
   /** shared/auth: access token, session hooks, require-session, login page. */
   auth: boolean;
+  /** .prettierrc with the Tailwind class-sorting plugin, and a format script. */
+  prettier: boolean;
 }
 
 export interface ProjectConfig {

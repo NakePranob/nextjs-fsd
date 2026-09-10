@@ -13,6 +13,7 @@ export function showProjectConfig(): void {
     ["package manager", config.packageManager],
     ["error handling", config.features.errorHandling ? pc.green("installed") : pc.dim("not installed")],
     ["auth", config.features.auth ? pc.green("installed") : pc.dim("not installed")],
+    ["prettier", config.features.prettier ? pc.green("installed") : pc.dim("not installed")],
   ];
 
   console.log();

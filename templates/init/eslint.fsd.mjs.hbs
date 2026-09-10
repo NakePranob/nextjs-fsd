@@ -13,6 +13,11 @@
 // _app -> _pages -> widgets -> features -> entities -> shared — and a slice is
 // always entered through its index.ts.
 
+// All six, even though `init` only creates _app, _pages and shared. A block
+// whose `files` glob matches no directory costs nothing and configures
+// nothing — it is not a nudge to go create widgets/features/entities. Those
+// appear when a second consumer forces them, and the rule is already here
+// waiting when they do.
 const LAYERS = ["_app", "_pages", "widgets", "features", "entities", "shared"];
 
 // Layers divided into slices. `_app` and `shared` hold segments instead, so
