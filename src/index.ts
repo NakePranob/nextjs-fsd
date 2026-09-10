@@ -33,7 +33,7 @@ program
   .description(
     "Keep a Next.js App Router project on Feature-Sliced Design.\n\n" +
       "Next.js creates the app (`create-next-app`); this only shapes what is inside it: `init` once, " +
-      "then `generate` for slices and `add` for the API error handling and auth wiring.\n\n" +
+      "then `generate` for slices and `add` for the API error handling, auth wiring and formatting.\n\n" +
       "Run `nextjs-fsd` with no arguments to pick what to do from a menu. Commands ask for whatever you omit; " +
       "`--defaults` answers every question for CI."
   )
@@ -185,7 +185,7 @@ async function runAddWizard(): Promise<void> {
 
 const add = program
   .command("add")
-  .description("add shared infrastructure; bare `add` opens an error-handling/auth wizard")
+  .description("add shared infrastructure; bare `add` opens an error-handling/auth/prettier wizard")
   .action(async () => {
     try {
       await runAddWizard();
@@ -289,7 +289,7 @@ async function runTopMenu(): Promise<void> {
     message: "What do you want to do?",
     choices: [
       { name: "Generate (a page or a features/entities slice)", value: "generate" },
-      { name: "Add (error handling / auth)", value: "add" },
+      { name: "Add (error handling / auth / prettier)", value: "add" },
       { name: "Show the project config", value: "config" },
     ],
   });
