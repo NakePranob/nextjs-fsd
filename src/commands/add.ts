@@ -6,7 +6,7 @@ import { ProjectConfig } from "../types";
 import { confirm } from "../prompts";
 import { readConfig, setFeature } from "../utils/config";
 import { asCatalogEntries, copyFor } from "../utils/copy";
-import { applyTemplates, TemplateEntry } from "../utils/render";
+import { applyTemplates, formatFiles, TemplateEntry } from "../utils/render";
 import {
   addDependencies,
   appendEnvExample,
@@ -14,12 +14,18 @@ import {
   appendScript,
   installDependencies,
   patchLayoutProviders,
+  runCommand,
 } from "../utils/project";
 import { report } from "./init";
 
 const API_DEPS = {
   "@tanstack/react-query": "^5.101.4",
   axios: "^1.19.0",
+};
+
+const PRETTIER_DEV_DEPS = {
+  prettier: "^3.9.6",
+  "prettier-plugin-tailwindcss": "^0.8.1",
 };
 
 export interface AddOptions {
@@ -114,6 +120,10 @@ export async function addErrorHandling(opts: AddOptions): Promise<string[]> {
 
   const layoutPatch = ownsProviders ? patchLayoutProviders(projectDir, config.appDir, config.alias) : "already";
   if (layoutPatch === "patched") written.push(`${config.appDir}/layout.tsx (<Providers>)`);
+
+  // The two files above were edited as text, not rendered from a template, so
+  // applyTemplates never saw them. Missing ones are skipped.
+  await formatFiles(projectDir, [`${config.appDir}/layout.tsx`, `${config.srcDir}/shared/ui/index.ts`]);
 
   const added = addDependencies(projectDir, API_DEPS);
   if (writesTest) {
@@ -225,6 +235,99 @@ export async function addAuth(opts: AddOptions): Promise<void> {
   console.log(
     `\n${pc.bold("Next:")} put a page behind the session guard with ` +
       pc.cyan("nextjs-fsd generate page dashboard --auth")
+  );
+}
+
+/**
+ * Adds prettier, with the Tailwind class-sorting plugin pointed at the
+ * stylesheet `init` moved.
+ *
+ * Worth a command rather than a line in the README because of that pointer:
+ * Tailwind v4 has no config file for the plugin to find, so it needs
+ * `tailwindStylesheet`, and `init` is what moved `globals.css` out of the
+ * route directory in the first place. Everyone who adds prettier by hand
+ * afterwards has to rediscover both facts.
+ *
+ * Prettier's own defaults are left alone. Indent width and print width are
+ * taste, they are the first thing anyone changes, and a generator picking them
+ * would only be picking a fight.
+ */
+export async function addPrettier(opts: AddOptions): Promise<void> {
+  const projectDir = process.cwd();
+  const config = readConfig(projectDir);
+  if (config.features.prettier) {
+    throw new Error(
+      "a prettier config already exists in this project — a second one would not merge with it, it would be ignored. Add the plugin to the config you have:\n" +
+        '  "plugins": ["prettier-plugin-tailwindcss"],\n' +
+        `  "tailwindStylesheet": "./${config.srcDir}/_app/styles/globals.css",\n` +
+        '  "tailwindFunctions": ["cn", "cva"]'
+    );
+  }
+
+  await confirmAdd(
+    [
+      `add ${pc.cyan(".prettierrc")} — prettier defaults plus prettier-plugin-tailwindcss, pointed at ${pc.cyan(`${config.srcDir}/_app/styles/globals.css`)} (Tailwind v4 has no config file to find) and taught about ${pc.cyan("cn()")} / ${pc.cyan("cva()")}`,
+      `add ${pc.cyan(".prettierignore")} — markdown only; prettier already reads .gitignore`,
+      `add a ${pc.cyan("format")} script, and ${pc.cyan("prettier --check .")} to ${pc.cyan("lint")} so whatever runs lint enforces it`,
+      `add ${Object.keys(PRETTIER_DEV_DEPS).join(" + ")} to devDependencies`,
+      pc.yellow(
+        "then format the project once — every file, in one pass. Adding the check without the pass would leave `lint` failing on files nobody touched. Commit it on its own."
+      ),
+    ],
+    opts
+  );
+
+  const written = await applyTemplates(
+    projectDir,
+    [
+      { template: "add/prettier/prettierrc.hbs", output: ".prettierrc" },
+      { template: "add/prettier/prettierignore.hbs", output: ".prettierignore" },
+    ],
+    config
+  );
+
+  if (appendScript(projectDir, "format", "prettier --write .")) written.push("package.json (format script)");
+  // On lint rather than a pre-commit hook: the project may not have one, and
+  // whatever already runs lint — CI, a hook, an editor task — picks this up
+  // with no further wiring.
+  if (appendScript(projectDir, "lint", "prettier --check .")) written.push("package.json (lint script)");
+
+  const added = addDependencies(projectDir, PRETTIER_DEV_DEPS, "devDependencies");
+  setFeature(projectDir, "prettier", true);
+  report(written, added);
+  finish(projectDir, config, added, opts);
+
+  // The pass has to happen, and it has to happen here. `prettier --check .` on
+  // lint against an unformatted tree fails on every file in the project — an
+  // add that hands back a red lint is worse than one that never touched lint.
+  // Needs the install, so `--no-install` gets the instruction instead.
+  if (opts.install === false) {
+    console.log(
+      pc.yellow(
+        `\n\`lint\` will fail until the project is formatted. Run \`${config.packageManager} install\`, ` +
+          `then \`${config.packageManager} run format\`.`
+      )
+    );
+    return;
+  }
+
+  console.log(pc.dim("\nformatting the project once, so `lint` passes:"));
+  try {
+    runCommand(projectDir, config.packageManager, ["prettier", "--write", "."]);
+  } catch {
+    // Everything above already landed. Failing the whole command now would
+    // suggest none of it did, and the fix is one command the user can run.
+    console.log(
+      pc.yellow(
+        `\ncould not run prettier — everything else is written. Run \`${config.packageManager} run format\` ` +
+          "once the install finishes; `lint` fails until you do."
+      )
+    );
+    return;
+  }
+  console.log(
+    `\n${pc.bold("Next:")} commit that pass on its own — it touches every file, ` +
+      "and nobody can review it mixed into a change."
   );
 }
 

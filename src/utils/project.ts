@@ -22,6 +22,48 @@ export function readPackageJson(projectDir: string): PackageJson {
   return fs.readJsonSync(file) as PackageJson;
 }
 
+/**
+ * Writes JSON back with the indentation the file already had.
+ *
+ * `{ spaces: 2 }` is right for a file this CLI creates and wrong for one it
+ * edits. A project whose formatter is set to anything else gets package.json,
+ * tsconfig.json and nextjs-fsd.config.json silently reindented by every `add`
+ * — and then a pre-commit format check fails on files nobody touched by hand.
+ */
+export function writeJson(file: string, data: unknown): void {
+  fs.writeJsonSync(file, data, { spaces: detectIndent(file) });
+}
+
+/** First indented line wins: JSON's own nesting means every deeper level is a
+ *  multiple of it. Falls back to 2 for a file being created. */
+function detectIndent(file: string): number | string {
+  if (!fs.existsSync(file)) return 2;
+  const match = /\n([ \t]+)"/.exec(fs.readFileSync(file, "utf8"));
+  if (!match) return 2;
+  return match[1].includes("\t") ? "\t" : match[1].length;
+}
+
+/**
+ * The git repository root at or above `projectDir`, or `projectDir` when
+ * there is no repository.
+ *
+ * Agent tooling reads `.claude/` and `.agents/` from the repository root, not
+ * from whichever directory a command ran in. In a monorepo — a `web/` beside
+ * an `api/` — writing a skill next to package.json puts it somewhere nothing
+ * ever loads it, which is a silent failure: the file exists, looks right, and
+ * is never read.
+ */
+export function findRepoRoot(projectDir: string): string {
+  let dir = path.resolve(projectDir);
+  for (;;) {
+    // A file, not a directory, inside a worktree or a submodule.
+    if (fs.existsSync(path.join(dir, ".git"))) return dir;
+    const parent = path.dirname(dir);
+    if (parent === dir) return path.resolve(projectDir);
+    dir = parent;
+  }
+}
+
 // Lockfile, not the `packageManager` field: the field is often absent and the
 // lockfile is what actually decided which client installed node_modules.
 export function detectPackageManager(projectDir: string): PackageManager {
@@ -36,6 +78,59 @@ export function detectPackageManager(projectDir: string): PackageManager {
     if (fs.existsSync(path.join(projectDir, lockfile))) return manager;
   }
   return "npm";
+}
+
+/**
+ * Writes an agent skill where the agents actually look for it.
+ *
+ * Real file under `.agents/skills/`, symlinked from `.claude/skills/`: Claude
+ * Code reads the second, Codex and anything following the AGENTS.md
+ * convention read the first, and one file means one thing to keep current.
+ * Both go at the repository root — see findRepoRoot for why a monorepo
+ * workspace is the wrong place.
+ *
+ * Returns what was written, as paths relative to `projectDir`, because that is
+ * the directory the user typed the command in.
+ */
+export function writeAgentSkill(projectDir: string, name: string, content: string): string[] {
+  const root = findRepoRoot(projectDir);
+  const relative = (target: string) => toPosix(path.relative(projectDir, target)) || ".";
+
+  const real = path.join(root, ".agents", "skills", name, "SKILL.md");
+  fs.ensureDirSync(path.dirname(real));
+  fs.writeFileSync(real, content);
+  const written = [relative(real)];
+
+  const link = path.join(root, ".claude", "skills", name);
+  // lstat, not existsSync: a symlink left pointing at a deleted target is
+  // still a thing in the way, and existsSync follows it and says no.
+  if (lstatOrNull(link)) return written;
+
+  fs.ensureDirSync(path.dirname(link));
+  try {
+    fs.symlinkSync(path.join("..", "..", ".agents", "skills", name), link, "dir");
+    written.push(`${relative(link)} -> .agents/skills/${name}`);
+  } catch {
+    // Windows refuses symlinks without developer mode or elevation. A second
+    // real copy still works for Claude Code — it just has to be rewritten by
+    // the next `init`, which is what the CLI does anyway.
+    fs.ensureDirSync(link);
+    fs.writeFileSync(path.join(link, "SKILL.md"), content);
+    written.push(relative(path.join(link, "SKILL.md")));
+  }
+  return written;
+}
+
+function lstatOrNull(target: string): fs.Stats | null {
+  try {
+    return fs.lstatSync(target);
+  } catch {
+    return null;
+  }
+}
+
+function toPosix(value: string): string {
+  return value.split(path.sep).join("/");
 }
 
 /**
@@ -96,7 +191,7 @@ export function addDependencies(
   // Sorted so a diff of package.json stays reviewable instead of appending in
   // whatever order a template listed its dependencies.
   pkg[kind] = Object.fromEntries(Object.entries(target).sort(([a], [b]) => a.localeCompare(b)));
-  fs.writeJsonSync(file, pkg, { spaces: 2 });
+  writeJson(file, pkg);
   return added;
 }
 
@@ -148,7 +243,7 @@ export function patchTsconfigPaths(projectDir: string, alias: string, srcDir: st
   const existing: string[] = Array.isArray(paths[key]) ? paths[key] : [];
   if (existing[0] === first) return false;
   paths[key] = [first, ...existing.filter((entry) => entry !== first)];
-  fs.writeJsonSync(file, config, { spaces: 2 });
+  writeJson(file, config);
   return true;
 }
 
@@ -164,7 +259,7 @@ export function appendScript(projectDir: string, name: string, step: string): bo
   const existing = scripts[name];
   if (existing?.includes(step)) return false;
   scripts[name] = existing ? `${existing} && ${step}` : step;
-  fs.writeJsonSync(file, pkg, { spaces: 2 });
+  writeJson(file, pkg);
   return true;
 }
 

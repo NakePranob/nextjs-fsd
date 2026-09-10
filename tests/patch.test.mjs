@@ -4,7 +4,15 @@ import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 
-import { detectAppDir, patchEslintConfig, patchLayoutProviders, patchTsconfigPaths } from "../dist/utils/project.js";
+import {
+  detectAppDir,
+  findRepoRoot,
+  patchEslintConfig,
+  patchLayoutProviders,
+  patchTsconfigPaths,
+  writeAgentSkill,
+  writeJson,
+} from "../dist/utils/project.js";
 import { addTailwindSources } from "../dist/commands/init.js";
 import { validateSliceName, validateRoute, resolveNaming } from "../dist/utils/naming.js";
 
@@ -186,4 +194,59 @@ test("appDir is posix even on Windows, because it becomes a glob", () => {
 
   assert.equal(detectAppDir(dir), "src/app");
   assert.doesNotMatch(detectAppDir(dir), /\\\\/);
+});
+
+test("editing a JSON file keeps the indentation it already had", () => {
+  // package.json belongs to the project's formatter, not to this CLI. Writing
+  // it back at 2 spaces reindents a file nobody edited, and the next commit
+  // fails a format check on the diff.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "nextjs-fsd-json-"));
+  for (const [label, indent] of [["four spaces", "    "], ["tabs", "\t"]]) {
+    const file = path.join(dir, `${label.replace(" ", "-")}.json`);
+    fs.writeFileSync(file, `{\n${indent}"name": "web",\n${indent}"scripts": {\n${indent}${indent}"lint": "eslint"\n${indent}}\n}\n`);
+    const parsed = JSON.parse(fs.readFileSync(file, "utf8"));
+    parsed.scripts.format = "prettier --write .";
+    writeJson(file, parsed);
+    const written = fs.readFileSync(file, "utf8");
+    assert.match(written, new RegExp(`^${indent === "\t" ? "\\t" : "    "}"name"`, "m"), label);
+    assert.equal(JSON.parse(written).scripts.format, "prettier --write .", label);
+  }
+
+  // A file being created has no indentation to read — 2 is the JSON default
+  // every other tool writes.
+  const fresh = path.join(dir, "fresh.json");
+  writeJson(fresh, { a: 1 });
+  assert.match(fs.readFileSync(fresh, "utf8"), /^  "a"/m);
+});
+
+test("the skill goes to the repository root, not the workspace it was run in", () => {
+  // The bug this pins down is silent: a skill written to web/.claude/skills
+  // exists, reads correctly, and is never loaded, because agents look at the
+  // repository root.
+  const repo = fs.mkdtempSync(path.join(os.tmpdir(), "nextjs-fsd-mono-"));
+  fs.mkdirSync(path.join(repo, ".git"));
+  const workspace = path.join(repo, "web");
+  fs.mkdirSync(workspace);
+
+  assert.equal(findRepoRoot(workspace), path.resolve(repo));
+
+  const written = writeAgentSkill(workspace, "nextjs-fsd", "# skill\n");
+  assert.equal(fs.readFileSync(path.join(repo, ".agents/skills/nextjs-fsd/SKILL.md"), "utf8"), "# skill\n");
+  // Reported relative to where the command was typed, which is up and over.
+  assert.ok(written.some((line) => line.startsWith("../.agents/skills/nextjs-fsd/SKILL.md")), written.join(", "));
+
+  // Read through .claude/skills, whichever way that path was made.
+  const link = path.join(repo, ".claude/skills/nextjs-fsd");
+  const viaClaude = fs.statSync(link).isDirectory()
+    ? fs.readFileSync(path.join(link, "SKILL.md"), "utf8")
+    : null;
+  assert.equal(viaClaude, "# skill\n");
+
+  // Second run leaves the link alone rather than throwing on an existing path.
+  assert.doesNotThrow(() => writeAgentSkill(workspace, "nextjs-fsd", "# skill\n"));
+});
+
+test("no repository above it falls back to the project directory", () => {
+  const loose = fs.mkdtempSync(path.join(os.tmpdir(), "nextjs-fsd-loose-"));
+  assert.equal(findRepoRoot(loose), path.resolve(loose));
 });

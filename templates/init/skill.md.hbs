@@ -24,9 +24,10 @@ Create slices with the CLI rather than by hand, so the route file, the
 stay consistent. Hand-written slices are exactly what the two linters then
 report.
 
-This file is emitted at `.claude/skills/nextjs-fsd/SKILL.md`. Agents that do
-not load `.claude/skills` should follow the root `AGENTS.md`, which points at
-[docs/fsd.md](../../../docs/fsd.md) — the fuller convention, and the source of
+This file is emitted at `.agents/skills/nextjs-fsd/SKILL.md` in the repository
+root, symlinked from `.claude/skills/nextjs-fsd`. Agents that load neither
+should follow `AGENTS.md`, which points at
+[docs/fsd.md]({{docsFromSkill}}) — the fuller convention, and the source of
 truth if this file and it ever disagree.
 
 **FSD methodology questions are not this skill's job.** Whether a thing should
@@ -87,6 +88,7 @@ nextjs-fsd generate slice <features|entities|widgets> <name> [--segments ui,mode
 nextjs-fsd generate layout <name> [--route <path>] [--no-route] [--defaults]
 nextjs-fsd add error-handling [-y] [--no-install]
 nextjs-fsd add auth [-y] [--no-install]
+nextjs-fsd add prettier [-y] [--no-install]
 nextjs-fsd config show
 ~~~
 
@@ -99,6 +101,11 @@ Feature gates, which fail loudly rather than generating something broken:
 - `--errors` and the `api` segment require `features.errorHandling` →
   run `add error-handling` first
 - `add auth` installs error handling itself if it is missing; do not run both
+- `add prettier` formats the whole project once, on purpose — it puts
+  `prettier --check .` on the lint script, and adding the check without the
+  pass leaves `{{lintCommand}}` failing on every file. Commit that pass by
+  itself. Once it is installed, generated files come out formatted; do not
+  reformat them by hand
 
 ## Extending, not rewriting
 
@@ -154,10 +161,13 @@ After generating and filling in a slice:
 {{packageManager}} run build
 ~~~
 
-ESLint reports a wrong-way or slice-internal import at the file. steiger
-reports what one file cannot show. `fsd/insignificant-slice` on a brand-new
-slice means nothing imports it yet — either wire it up or inline it back into
-its single consumer; it is the linter working, not a false positive.
+Both report a wrong-way or slice-internal import — ESLint at the file as you
+type it, steiger over the whole tree. ESLint is not there because steiger
+cannot see imports; it is there because a rule you meet on save is a rule you
+stop breaking. steiger also reports what no single file can show:
+`fsd/insignificant-slice` on a brand-new slice means nothing imports it yet —
+either wire it up or inline it back into its single consumer; it is the linter
+working, not a false positive.
 
 Where the CLI wrote a `client.test.ts`, run the project's test command too. Do
 not delete that test to make a change pass: the single-flight 401 refresh and

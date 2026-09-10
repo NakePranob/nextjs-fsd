@@ -212,13 +212,13 @@ check("init writes the layer, linter, shadcn and agent files", () =>
     "eslint.fsd.mjs",
     "components.json",
     "docs/fsd.md",
-    ".claude/skills/nextjs-fsd/SKILL.md",
+    ".agents/skills/nextjs-fsd/SKILL.md",
     "AGENTS.md",
     "nextjs-fsd.config.json",
   ])
 );
 check("the skill carries frontmatter and defers FSD theory to the FSD skill", () => {
-  const skill = read(a, ".claude/skills/nextjs-fsd/SKILL.md");
+  const skill = read(a, ".agents/skills/nextjs-fsd/SKILL.md");
   // Line-ending agnostic on purpose: what this asserts is the frontmatter, and
   // a CRLF checkout is a separate failure with its own check below — one
   // assertion should not fail for the other's reason.
@@ -233,7 +233,14 @@ check("the skill carries frontmatter and defers FSD theory to the FSD skill", ()
 check("AGENTS.md points at both the doc and the skill", () => {
   const agents = read(a, "AGENTS.md");
   assert.match(agents, /docs\/fsd\.md/);
-  assert.match(agents, /\.claude\/skills\/nextjs-fsd\/SKILL\.md/);
+  assert.match(agents, /\.agents\/skills\/nextjs-fsd\/SKILL\.md/);
+});
+check(".claude/skills reaches the same file, without a second copy to keep current", () => {
+  const link = path.join(a, ".claude", "skills", "nextjs-fsd");
+  assert.equal(read(a, ".claude/skills/nextjs-fsd/SKILL.md"), read(a, ".agents/skills/nextjs-fsd/SKILL.md"));
+  // A symlink everywhere it is allowed; the Windows fallback writes a real
+  // copy, and that is the only case where two files exist.
+  if (process.platform !== "win32") assert.ok(fs.lstatSync(link).isSymbolicLink());
 });
 check("the stylesheet moved rather than being copied", () => assert.ok(!has(a, "app/globals.css")));
 check("@source lands below @import, where Tailwind reads it", () => {
@@ -289,8 +296,12 @@ check("<Providers> wraps the JSX children, not the destructured parameter", () =
 check("the catalog carries Thai copy by default", () =>
   assert.match(read(a, "src/shared/api/error-catalog.ts"), /VALIDATION_ERROR: "ข้อมูล/)
 );
-check("both features are recorded", () =>
-  assert.deepEqual(JSON.parse(read(a, "nextjs-fsd.config.json")).features, { errorHandling: true, auth: true })
+check("both features are recorded, and the one not installed yet is not", () =>
+  assert.deepEqual(JSON.parse(read(a, "nextjs-fsd.config.json")).features, {
+    errorHandling: true,
+    auth: true,
+    prettier: false,
+  })
 );
 check("a second add auth refuses", () =>
   assert.match(cliFails(a, ["add", "auth", "-y"]), /already installed/)
@@ -476,6 +487,35 @@ check("generated files use LF, whatever the host OS", () => {
   }
   assert.deepEqual(crlf, [], `CRLF in: ${crlf.join(", ")}`);
 });
+const prettierOutput = cli(a, ["add", "prettier", "--no-install", "-y"]);
+check("add prettier points the plugin at the stylesheet init moved", () => {
+  const config = JSON.parse(read(a, ".prettierrc"));
+  assert.deepEqual(config.plugins, ["prettier-plugin-tailwindcss"]);
+  // The whole reason this is a command: Tailwind v4 has no config file, so the
+  // plugin has to be handed the stylesheet — at the path init moved it to.
+  assert.equal(config.tailwindStylesheet, "./src/_app/styles/globals.css");
+  assert.ok(has(a, `${config.tailwindStylesheet.slice(2)}`), "tailwindStylesheet points at a file that exists");
+  assert.deepEqual(config.tailwindFunctions, ["cn", "cva"]);
+});
+check("add prettier wires format and a check on lint", () => {
+  const scripts = JSON.parse(read(a, "package.json")).scripts;
+  assert.equal(scripts.format, "prettier --write .");
+  assert.match(scripts.lint, /prettier --check \./);
+  // Appended, not replaced — eslint and steiger still run.
+  assert.match(scripts.lint, /eslint/);
+  assert.match(scripts.lint, /steiger/);
+});
+check("add prettier with --no-install formats nothing and says lint will fail", () => {
+  // The pass needs prettier on disk. Without it the honest move is to leave
+  // the tree alone and say plainly that lint is red until it runs.
+  assert.match(read(a, "steiger.config.ts"), /^import fsd from/m);
+  assert.match(prettierOutput, /lint` will fail until the project is formatted/);
+});
+check("a second add prettier refuses instead of writing an ignored config", () => {
+  const output = cliFails(a, ["add", "prettier", "-y"]);
+  assert.match(output, /already exists/);
+});
+
 check("no template variable survived into any generated file", () => {
   const leaks = [];
   for (const dir of [a, b]) {

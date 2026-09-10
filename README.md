@@ -55,6 +55,7 @@ npx create-next-app@latest my-app --ts --app --tailwind --eslint
 cd my-app
 nextjs-fsd init                # once: FSD layers, both linters, docs
 nextjs-fsd add auth            # shared/auth + a login page (pulls in error handling)
+nextjs-fsd add prettier        # formatting, with Tailwind class sorting
 nextjs-fsd generate page dashboard --auth
 ~~~
 
@@ -125,6 +126,7 @@ anything, and names every missing flag at once instead of failing on the first.
 | add | Open the infrastructure wizard | — |
 | add error-handling | Add `shared/api`: error type, catalogs, client | add errors |
 | add auth | Add `shared/auth` and a login page | — |
+| add prettier | Add prettier + Tailwind class sorting, a `format` script, and a check on `lint` | — |
 | config show | Print the resolved project configuration | — |
 | config set locale \<th\|en\> | Change the language of future generated copy | — |
 
@@ -171,7 +173,8 @@ eslint.fsd.mjs                         # the import boundary as ESLint rules
 steiger.config.ts                      # the whole-tree FSD checks
 components.json                        # aims `shadcn add` at src/shared/ui
 docs/fsd.md                            # the convention, in full
-.claude/skills/nextjs-fsd/SKILL.md     # the same contract, for Claude Code
+<repo>/.agents/skills/nextjs-fsd/      # the same contract, as a skill
+<repo>/.claude/skills/nextjs-fsd       # symlink to it, for Claude Code
 AGENTS.md                              # an FSD section appended, or created
 CLAUDE.md                              # created if absent, includes AGENTS.md
 nextjs-fsd.config.json                 # layers, appDir, alias, locale, features
@@ -181,6 +184,15 @@ nextjs-fsd.config.json                 # layers, appDir, alias, locale, features
 shadcn's own defaults put components in `./components/ui` and a `utils.ts` at
 the project root — outside the layers entirely. An existing `components.json`
 is left alone.
+
+The skill goes to the **repository root**, not to the project directory. Agent
+tooling reads `.claude/` and `.agents/` from the root of the repository, so in
+a monorepo — a `web/` beside an `api/` — a skill written next to `package.json`
+is a file that exists, reads correctly, and is never loaded. The real file
+lives under `.agents/skills/` with `.claude/skills/` symlinked to it, so Claude
+Code and anything following the AGENTS.md convention read one file rather than
+two copies to keep in sync. Where symlinks are refused (Windows without
+developer mode) a real copy is written instead.
 
 `nextjs-fsd.config.json` records where the App Router lives, the import alias,
 the copy language, and which features are installed, so later commands
@@ -343,6 +355,47 @@ Two consequences worth knowing:
   `page.tsx` resolving to one URL is a Next.js build error, and a page
   generated with `--route "(admin)/dashboard"` is not where the default would
   look
+
+## add prettier — formatting, with Tailwind class sorting
+
+~~~bash
+nextjs-fsd add prettier
+nextjs-fsd add prettier --no-install
+~~~
+
+Prettier is three lines of config in any other project. It is a command here
+because of one of them: Tailwind v4 has no config file for
+`prettier-plugin-tailwindcss` to find, so the plugin has to be handed the
+stylesheet through `tailwindStylesheet` — and `init` is what moved that
+stylesheet out of the route directory to `src/_app/styles/globals.css`. This
+CLI is the only thing that knows both facts.
+
+~~~text
+.prettierrc            # prettier defaults + the plugin, pointed at globals.css
+.prettierignore        # *.md only — prettier 3 already reads .gitignore
+package.json           # a `format` script, and `prettier --check .` on `lint`
+~~~
+
+Prettier's own defaults are left alone. Indent width and print width are
+taste, they are the first thing anyone changes, and a generator picking them
+would only be picking a fight.
+
+`tailwindFunctions: ["cn", "cva"]` sorts the classes inside those calls too,
+not only the ones in a `className` attribute — `cn()` and `cva()` are where
+most of them live in a shadcn project.
+
+The check goes on `lint` rather than into a pre-commit hook: the project may
+not have a hook, and whatever already runs lint — CI, husky, an editor task —
+picks it up with no further wiring.
+
+**It formats the project once, immediately.** Adding `prettier --check .` to
+lint without that pass would hand back a project whose lint fails on every
+file. That pass is a large diff and worth its own commit; with `--no-install`
+it is skipped and the CLI says so instead.
+
+Every `generate` after this one formats what it writes with **the project's**
+prettier, at whatever settings the project chose. Templates are not
+hand-maintained to one particular printWidth.
 
 ## add error-handling — the API boundary
 

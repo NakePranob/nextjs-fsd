@@ -11,12 +11,13 @@ Rules that are easy to break without noticing:
 - imports point downwards only, and a slice is imported through its `index.ts`
 - `{{appDir}}/<route>/page.tsx` re-exports the FSD page **and its `metadata`** — nothing else
 - `"use client"` goes on the leaf that needs it, not on the page
-- `{{lintCommand}}` runs both linters: ESLint (`eslint.fsd.mjs`) flags a wrong-way or slice-internal import per file, steiger (`steiger.config.ts`) flags whole-tree problems like a slice with no consumers
+- `{{lintCommand}}` runs both linters: ESLint (`eslint.fsd.mjs`) flags a wrong-way or slice-internal import per file as you type, steiger (`steiger.config.ts`) flags the same imports plus what one file cannot show — a slice with no consumers, a layer sliced too finely
 - editing `eslint.fsd.mjs`: flat config replaces a rule's options when a later block matches the same file, so all of a layer's `no-restricted-imports` patterns must stay in that layer's one block
 
-Claude Code also loads this as a skill at
-`.claude/skills/nextjs-fsd/SKILL.md`, which carries the same contract in the
-form it reads first. `docs/fsd.md` is the source of truth if the two disagree.
+Agents also load this as a skill at `.agents/skills/nextjs-fsd/SKILL.md` in
+the repository root, symlinked from `.claude/skills/nextjs-fsd`, which carries
+the same contract in the form they read first. `docs/fsd.md` is the source of
+truth if the two disagree.
 
 Scaffold with `nextjs-fsd generate page|slice|layout` rather than by hand, so
 slices keep the same shape. Re-running one extends what exists (adds a

@@ -12,10 +12,12 @@ import {
   appendScript,
   detectAppDir,
   detectPackageManager,
+  findRepoRoot,
   installDependencies,
   patchEslintConfig,
   patchLayoutStyleImport,
   patchTsconfigPaths,
+  writeAgentSkill,
 } from "../utils/project";
 import { cliVersion } from "../utils/version";
 
@@ -75,7 +77,7 @@ export async function initProject(projectDir: string, opts: InitOptions): Promis
       `add ${pc.cyan("eslint.fsd.mjs")} — the import boundary as ESLint rules, so a wrong-way import is flagged in your editor (no new dependencies)`,
       `add steiger + the FSD plugin and a steiger.config.ts for the whole-tree checks ESLint cannot make, then chain both into the lint script`,
       `add ${pc.cyan("components.json")} so \`shadcn add\` writes into ${srcDir}/shared/ui instead of ./components/ui`,
-      `write ${pc.cyan("docs/fsd.md")}, a ${pc.cyan(".claude/skills/nextjs-fsd")} skill, and point AGENTS.md at both`,
+      `write ${pc.cyan("docs/fsd.md")}, a ${pc.cyan(".agents/skills/nextjs-fsd")} skill at the repository root (symlinked from ${pc.cyan(".claude/skills/")}), and point AGENTS.md at both`,
     ]) {
       console.log(`  ${pc.dim("•")} ${line}`);
     }
@@ -95,16 +97,21 @@ export async function initProject(projectDir: string, opts: InitOptions): Promis
     packageManager,
     cssSourceApp: toPosix(path.relative(path.join(srcDir, "_app", "styles"), appDir)),
     cssSourceSrc: toPosix(path.relative(path.join(srcDir, "_app", "styles"), srcDir)),
+    // The skill lives at the repository root and docs/fsd.md lives in the
+    // project — the same directory only in a single-package repo. In a
+    // monorepo the link has to cross back into the workspace.
+    docsFromSkill: toPosix(
+      path.relative(
+        path.join(findRepoRoot(projectDir), ".agents", "skills", "nextjs-fsd"),
+        path.join(path.resolve(projectDir), "docs", "fsd.md")
+      )
+    ),
   };
 
   const written = await applyTemplates(projectDir, [
     { template: "init/steiger.config.ts.hbs", output: "steiger.config.ts" },
     { template: "init/eslint.fsd.mjs.hbs", output: "eslint.fsd.mjs" },
     { template: "init/fsd.md.hbs", output: "docs/fsd.md" },
-    // Same content as the AGENTS.md section, aimed at the tool that reads
-    // .claude/skills — an agent's instinct on "add a settings screen" is to
-    // hand-write the files, which is exactly what the two linters then report.
-    { template: "init/skill.md.hbs", output: ".claude/skills/nextjs-fsd/SKILL.md" },
     {
       template: "init/globals.css.hbs",
       output: `${srcDir}/_app/styles/globals.css`,
@@ -201,19 +208,24 @@ export async function initProject(projectDir: string, opts: InitOptions): Promis
 
   console.log(
     `\n${pc.bold("Next:")} ${pc.cyan("nextjs-fsd generate page <name>")}, ` +
-      `${pc.cyan("nextjs-fsd add error-handling")}, ${pc.cyan("nextjs-fsd add auth")}`
+      `${pc.cyan("nextjs-fsd add error-handling")}, ${pc.cyan("nextjs-fsd add auth")}, ` +
+      `${pc.cyan("nextjs-fsd add prettier")}`
   );
 }
 
 /**
- * Adds an FSD section to AGENTS.md (creating it if absent) and a CLAUDE.md
- * that includes it.
+ * Writes the skill, adds an FSD section to AGENTS.md (creating it if absent),
+ * and a CLAUDE.md that includes it.
  *
- * Appended, never rewritten: AGENTS.md is usually already the project's own
- * instructions file, and the FSD conventions are one section of it.
+ * AGENTS.md is appended to, never rewritten: it is usually already the
+ * project's own instructions file, and the FSD conventions are one section of
+ * it. The skill goes to the repository root instead — see writeAgentSkill.
  */
 function writeAgentDocs(projectDir: string, context: object): string[] {
-  const written: string[] = [];
+  // Same content as the AGENTS.md section, aimed at the tool that loads
+  // skills — an agent's instinct on "add a settings screen" is to hand-write
+  // the files, which is exactly what the two linters then report.
+  const written = writeAgentSkill(projectDir, "nextjs-fsd", renderTemplate("init/skill.md.hbs", context));
   const section = renderTemplate("init/agents-section.md.hbs", context);
   const agents = path.join(projectDir, "AGENTS.md");
 
