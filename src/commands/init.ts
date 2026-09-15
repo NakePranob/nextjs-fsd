@@ -14,6 +14,7 @@ import {
   eslintRestrictsImports,
   detectPackageManager,
   findRepoRoot,
+  installCommitHook,
   installDependencies,
   patchEslintConfig,
   patchLayoutStyleImport,
@@ -30,6 +31,8 @@ const STEIGER_DEV_DEPS = {
 export interface InitOptions {
   locale?: Locale;
   install?: boolean;
+  /** false when --no-hooks was passed: write no commit-msg hook. */
+  hooks?: boolean;
   defaults?: boolean;
   yes?: boolean;
 }
@@ -98,6 +101,9 @@ export async function initProject(projectDir: string, opts: InitOptions): Promis
       `add steiger + the FSD plugin and a steiger.config.ts for the whole-tree checks ESLint cannot make, then chain both into the lint script`,
       `add ${pc.cyan("components.json")} so \`shadcn add\` writes into ${srcDir}/shared/ui instead of ./components/ui`,
       `write ${pc.cyan("docs/fsd.md")}, a ${pc.cyan(".agents/skills/nextjs-fsd")} skill at the repository root (symlinked from ${pc.cyan(".claude/skills/")}), and point AGENTS.md at both`,
+      opts.hooks === false
+        ? pc.dim("write no git hook (--no-hooks)")
+        : `write a ${pc.cyan("commit-msg")} hook that checks the subject is a Conventional Commit — shape only, your language and emoji rules stay yours — and point ${pc.cyan("core.hooksPath")} at it`,
     ]) {
       console.log(`  ${pc.dim("•")} ${line}`);
     }
@@ -181,7 +187,12 @@ export async function initProject(projectDir: string, opts: InitOptions): Promis
   const eslintPatch = ownsImportRules ? "already" : patchEslintConfig(projectDir);
   if (eslintPatch === "patched") written.push("eslint.config.mjs (spreads the FSD boundary rules)");
   if (appendScript(projectDir, "lint", `steiger ./${srcDir}`)) written.push("package.json (lint script)");
-  written.push(...writeAgentDocs(projectDir, context));
+  const hook =
+    opts.hooks === false
+      ? undefined
+      : installCommitHook(projectDir, renderTemplate("init/commit-msg.hbs", context));
+  written.push(...writeAgentDocs(projectDir, { ...context, huskyOwnsHooks: hook?.huskyOwnsHooks ?? false }, hook));
+  if (hook?.status === "installed") written.push(`${hook.file} (+ core.hooksPath)`);
 
   if (eslintPatch !== "patched" && eslintPatch !== "already") {
     console.log(
@@ -211,6 +222,17 @@ export async function initProject(projectDir: string, opts: InitOptions): Promis
   written.push("nextjs-fsd.config.json");
 
   report(written, added);
+  if (hook?.status === "exists") left.push(`${hook.file} ${pc.dim("— already there")}`);
+  if (hook?.status === "foreign-hooks-path") {
+    console.log(
+      pc.yellow(`\nwrote ${hook.file}, but core.hooksPath points somewhere else — move it there, or repoint it.`)
+    );
+  }
+  if (hook?.status === "no-repo") {
+    console.log(
+      pc.dim("\nno git repository here, so no commit-msg hook. Run `nextjs-fsd init` again after `git init`, or copy one in.")
+    );
+  }
   if (left.length > 0) {
     console.log();
     for (const file of left) console.log(`  ${pc.dim("·")} left alone: ${file}`);
@@ -263,7 +285,7 @@ export async function initProject(projectDir: string, opts: InitOptions): Promis
  * project's own instructions file, and the FSD conventions are one section of
  * it. The skill goes to the repository root instead — see writeAgentSkill.
  */
-function writeAgentDocs(projectDir: string, context: object): string[] {
+function writeAgentDocs(projectDir: string, context: object, hook?: { status: string }): string[] {
   // Same content as the AGENTS.md section, aimed at the tool that loads
   // skills — an agent's instinct on "add a settings screen" is to hand-write
   // the files, which is exactly what the two linters then report.
@@ -277,6 +299,13 @@ function writeAgentDocs(projectDir: string, context: object): string[] {
   } else if (!fs.readFileSync(agents, "utf8").includes("Feature-Sliced Design")) {
     fs.appendFileSync(agents, section);
     written.push("AGENTS.md (FSD section appended)");
+  }
+
+  // Only when a hook exists to enforce it — a convention nothing checks is a
+  // convention this CLI has no standing to write into someone's AGENTS.md.
+  if (hook && hook.status !== "no-repo" && !fs.readFileSync(agents, "utf8").includes("Conventional Commit")) {
+    fs.appendFileSync(agents, renderTemplate("init/git-section.md.hbs", context));
+    written.push("AGENTS.md (commit convention appended)");
   }
 
   const claude = path.join(projectDir, "CLAUDE.md");

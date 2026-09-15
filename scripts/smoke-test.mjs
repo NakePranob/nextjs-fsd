@@ -523,6 +523,60 @@ check("a 401 from anywhere resets the session entry rather than removing it", ()
   assert.doesNotMatch(queryClient, /^import .*shared\/auth/m);
 });
 
+// ------------------------------------------------------------------- hooks
+
+console.log("\ncommit-msg hook");
+const g = fixture(path.join(root, "g"));
+execFileSync("git", ["init", "-q"], { cwd: g, stdio: "ignore" });
+cli(g, ["init", "--no-install", "--defaults"]);
+check("a repository gets the hook, and git is pointed at it", () => {
+  assertFiles(g, [".githooks/commit-msg"]);
+  assert.equal(
+    execFileSync("git", ["config", "--get", "core.hooksPath"], { cwd: g, encoding: "utf8" }).trim(),
+    ".githooks"
+  );
+  assert.match(read(g, "AGENTS.md"), /Conventional Commits/);
+});
+check("the generated hook refuses a subject that is not a Conventional Commit", () => {
+  // Shape only: the language and the emoji are the project's call, and this
+  // is the half that is the same everywhere.
+  if (process.platform === "win32") return; // no POSIX sh to run it with
+  const hook = path.join(g, ".githooks", "commit-msg");
+  const message = path.join(g, "msg.txt");
+  const run = (subject) => {
+    fs.writeFileSync(message, `${subject}\n`);
+    try {
+      execFileSync("sh", [hook, message], { cwd: g, stdio: "ignore" });
+      return 0;
+    } catch (error) {
+      return error.status;
+    }
+  };
+  assert.equal(run("feat(login): add the MFA step"), 0);
+  assert.equal(run("feat: ✨ เพิ่มหน้าเข้าสู่ระบบ"), 0, "language and emoji are not this hook's business");
+  assert.equal(run("0.2.0"), 0, "a release commit is the bare version");
+  assert.equal(run("wip"), 1);
+});
+check("a project with husky keeps its own hooks path", () => {
+  const h = fixture(path.join(root, "h"));
+  execFileSync("git", ["init", "-q"], { cwd: h, stdio: "ignore" });
+  fs.mkdirSync(path.join(h, ".husky"));
+  cli(h, ["init", "--no-install", "--defaults"]);
+  // husky points core.hooksPath at .husky itself; taking that over would turn
+  // every hook it manages off.
+  assertFiles(h, [".husky/commit-msg"]);
+  assert.ok(!has(h, ".githooks/commit-msg"));
+  assert.throws(() =>
+    execFileSync("git", ["config", "--get", "core.hooksPath"], { cwd: h, stdio: "ignore" })
+  );
+});
+check("no repository means no hook, and no commit section in AGENTS.md", () => {
+  // Fixture `a` is a plain directory: create-next-app makes a repo, a
+  // monorepo workspace does not have one of its own.
+  assert.ok(!has(a, ".githooks/commit-msg"));
+  assert.doesNotMatch(read(a, "AGENTS.md"), /Conventional Commits/);
+});
+
 // ------------------------------------------------------------- brownfield
 
 console.log("\ninit over a project that already has rules of its own");

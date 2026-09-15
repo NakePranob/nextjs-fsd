@@ -117,6 +117,33 @@ alternative (a `mkdir`, an `rm -rf`, a linter that already reports it) is
 genuinely worse. `steiger` and `tsc` already cover more than they look like
 they do: an orphaned route file is a type error, not a missing feature.
 
+## Git
+
+Conventional Commit subjects, English, and **no emoji** —
+`type(optional-scope): what changed`. That last rule is the opposite of
+loan-management's, the repo this CLI was extracted from and where the same
+author writes emoji subjects daily, which is exactly why
+`.githooks/commit-msg` checks for one rather than trusting anybody to
+remember. It also refuses a Thai subject, and lets a bare version through.
+
+- The body carries *why*, in paragraphs: what the diff cannot say for itself,
+  what was checked, what is still a TODO. It is read far more often than the
+  subject is.
+- A release commit is the bare version — `0.3.0` — with a body arguing why it
+  is major, minor or patch.
+- Branch `type/<summary>`; PR base is `main`, title in the shape of a commit
+  subject, description in English.
+- Nothing publishes without a `v*.*.*` tag pointing at a matching
+  `package.json` — `scripts/check-release.mjs` refuses anything else, and
+  `release.yml` triggers on nothing but that tag. Pushing a branch is safe.
+
+Hooks are per-clone, so a fresh checkout needs one line before any of that is
+enforced:
+
+```bash
+git config core.hooksPath .githooks
+```
+
 ## Before handing off
 
 Run `pnpm run verify`, then `git diff --check`, `git diff` and

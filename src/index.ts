@@ -44,13 +44,15 @@ program
   .description("shape an existing Next.js App Router project into FSD layers (run this once, after create-next-app)")
   .option("--locale <locale>", 'language for the generated user-facing copy: "th" (default) or "en"')
   .option("--no-install", "write the files but do not run the package manager")
+  .option("--no-hooks", "write no commit-msg hook and leave core.hooksPath alone")
   .option("--defaults", "skip every question; Thai copy, and no confirmation")
   .option("-y, --yes", "skip only the confirmation summary")
-  .action(async (opts: { locale?: string; install?: boolean; defaults?: boolean; yes?: boolean }) => {
+  .action(async (opts: { locale?: string; install?: boolean; hooks?: boolean; defaults?: boolean; yes?: boolean }) => {
     try {
       await initProject(process.cwd(), {
         locale: parseLocale(opts.locale),
         install: opts.install,
+        hooks: opts.hooks,
         defaults: opts.defaults,
         yes: opts.yes || opts.defaults,
       });

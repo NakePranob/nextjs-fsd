@@ -1,0 +1,51 @@
+#!/bin/sh
+# This repo's own rules, which are stricter than the hook the CLI generates
+# (templates/init/commit-msg.hbs checks the shape only, because a generated
+# project's language and emoji rules are that project's business).
+#
+# Here the package is public and every line of it is English, while the author
+# works in a Thai repo daily — where the convention is the opposite one, emoji
+# and all. That is the mistake worth catching at the moment it is written.
+subject=$(head -n 1 "$1")
+
+case "$subject" in
+fixup\!*|squash\!*|amend\!*|Merge\ *|Revert\ *) exit 0 ;;
+esac
+
+# A release commit is the bare version, as `npm version` writes it.
+case "$subject" in
+[0-9]*.[0-9]*.[0-9]*) exit 0 ;;
+esac
+
+if printf '%s' "$subject" | grep -q '[฀-๿]'; then
+	echo "commit subject is Thai:"
+	echo "  $subject"
+	echo
+	echo "AGENTS.md: subjects here are English. Say it in Thai in the body if it reads better there."
+	exit 1
+fi
+
+# The other repo puts one after the colon. This one has none, in 22 commits.
+#
+# Matched as UTF-8 bytes under LC_ALL=C rather than with `grep -P`, which BSD
+# grep does not have — the -P version fails on macOS and, because a failed
+# grep is also "no match", it fails by letting everything through. The em dash
+# these subjects do use is E2 80 94, which is why E2 80 is not in the list.
+emoji=$(printf '\360\237|\342\234|\342\235|\342\255|\342\254|\357\270\217')
+if printf '%s' "$subject" | LC_ALL=C grep -Eq "$emoji"; then
+	echo "commit subject carries an emoji:"
+	echo "  $subject"
+	echo
+	echo "AGENTS.md: no emoji in this repo — that is loan-management's convention, not this one."
+	exit 1
+fi
+
+if ! printf '%s' "$subject" |
+	grep -Eq '^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)(\([a-z0-9/._-]+\))?!?: .+'; then
+	echo "commit subject is not a Conventional Commit:"
+	echo "  $subject"
+	echo
+	echo "  type(optional-scope): what changed"
+	echo "  build chore ci docs feat fix perf refactor revert style test"
+	exit 1
+fi

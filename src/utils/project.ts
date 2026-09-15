@@ -201,6 +201,74 @@ export function installDependencies(projectDir: string, manager: PackageManager)
   execFileSync(command[0], command.slice(1), { cwd: projectDir, stdio: "inherit" });
 }
 
+export type HookResult =
+  | { status: "installed" | "exists"; file: string; huskyOwnsHooks: boolean }
+  | { status: "no-repo" | "foreign-hooks-path"; file?: string; huskyOwnsHooks: boolean };
+
+/**
+ * Writes a commit-msg hook where git will actually run it.
+ *
+ * Three cases, and the first one is why this is not a template entry like
+ * everything else:
+ *
+ * - **husky already owns the hooks.** It points `core.hooksPath` at `.husky`,
+ *   so a hook written to `.githooks` would never run — and setting the path
+ *   ourselves would turn husky's own hooks off. The hook goes to `.husky/`
+ *   instead and nothing is configured.
+ * - **`core.hooksPath` is set to something else.** Somebody chose that; the
+ *   file is written anyway so it can be moved or pointed at, and the caller
+ *   says so rather than silently taking the setting over.
+ * - **no repository at all.** `init` runs before `git init` often enough
+ *   (create-next-app makes one, but not in a monorepo subdirectory), and a
+ *   hook in a directory git has never heard of is litter.
+ *
+ * Hooks live at the repository root, not in the project directory: in a
+ * monorepo the workspace has no `.git` of its own.
+ */
+export function installCommitHook(projectDir: string, contents: string): HookResult {
+  const repoRoot = findRepoRoot(projectDir);
+  const huskyOwnsHooks = fs.existsSync(path.join(repoRoot, ".husky"));
+  if (!fs.existsSync(path.join(repoRoot, ".git"))) return { status: "no-repo", huskyOwnsHooks };
+
+  const dir = huskyOwnsHooks ? ".husky" : ".githooks";
+  const file = path.posix.join(dir, "commit-msg");
+  const full = path.join(repoRoot, dir, "commit-msg");
+  if (fs.existsSync(full)) return { status: "exists", file, huskyOwnsHooks };
+
+  fs.ensureDirSync(path.dirname(full));
+  fs.writeFileSync(full, contents);
+  // A hook git cannot execute is a hook git skips, with no message at all.
+  fs.chmodSync(full, 0o755);
+  if (huskyOwnsHooks) return { status: "installed", file, huskyOwnsHooks };
+
+  const configured = gitConfig(repoRoot, "core.hooksPath");
+  if (configured !== undefined && configured !== dir) {
+    return { status: "foreign-hooks-path", file, huskyOwnsHooks };
+  }
+  if (configured === undefined) {
+    try {
+      execFileSync("git", ["config", "core.hooksPath", dir], { cwd: repoRoot, stdio: "ignore" });
+    } catch {
+      return { status: "foreign-hooks-path", file, huskyOwnsHooks };
+    }
+  }
+  return { status: "installed", file, huskyOwnsHooks };
+}
+
+function gitConfig(repoRoot: string, key: string): string | undefined {
+  try {
+    const value = execFileSync("git", ["config", "--get", key], {
+      cwd: repoRoot,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+    return value === "" ? undefined : value;
+  } catch {
+    // `git config --get` exits 1 when the key is unset, which is not an error.
+    return undefined;
+  }
+}
+
 export function runCommand(projectDir: string, manager: PackageManager, args: string[]): void {
   const runner = manager === "npm" ? "npx" : manager === "yarn" ? "yarn" : manager === "pnpm" ? "pnpm" : "bunx";
   console.log(pc.dim(`> ${runner} ${args.join(" ")}`));
