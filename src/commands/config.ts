@@ -23,7 +23,11 @@ export function showProjectConfig(): void {
   const current = cliVersion();
   if (stamped && stamped !== current) {
     console.log(
-      pc.dim(`\n  scaffolded with nextjs-fsd ${stamped}, running ${current} — templates may have moved on since.`)
+      pc.dim(
+        `\n  scaffolded with nextjs-fsd ${stamped}, running ${current} — templates may have moved on since.` +
+          "\n  CHANGELOG.md says what changed and which generated files are worth re-copying:" +
+          "\n  https://github.com/NakePranob/nextjs-fsd/blob/main/CHANGELOG.md"
+      )
     );
   }
   console.log();
