@@ -298,6 +298,12 @@ check("<Providers> wraps the JSX children, not the destructured parameter", () =
 check("the catalog carries Thai copy by default", () =>
   assert.match(read(a, "src/shared/api/error-catalog.ts"), /VALIDATION_ERROR: "ข้อมูล/)
 );
+check("the Thai typography rules ship with a Thai project only", () => {
+  // Tone marks stack and a latin-subset mono face has no Thai glyph — true
+  // wherever Thai is rendered, noise in a project that renders none.
+  assert.match(read(a, "docs/fsd.md"), /Thai copy renders differently/);
+  assert.match(read(a, ".agents/skills/nextjs-fsd/SKILL.md"), /nothing Thai inside/);
+});
 check("both features are recorded, and the one not installed yet is not", () =>
   assert.deepEqual(JSON.parse(read(a, "nextjs-fsd.config.json")).features, {
     errorHandling: true,
@@ -416,6 +422,15 @@ check("a page that would guard itself under a guarded shell is told", () =>
     /already guards the routes under it/
   )
 );
+cli(a, ["generate", "page", "invoices", "--model", "--defaults"]);
+check("--model gives a page its query hooks, and keeps them inside the slice", () => {
+  const model = read(a, "src/_pages/invoices/model/invoices.ts");
+  assert.match(model, /export const invoicesKey = \["invoices"\] as const;/);
+  assert.match(model, /invalidateQueries\(\{ queryKey: invoicesKey \}\)/);
+  // The public API of a page is the page. Hooks are the slice's own business,
+  // imported relatively from its ui/.
+  assert.doesNotMatch(read(a, "src/_pages/invoices/index.ts"), /invoicesKey/);
+});
 check("--guard is refused without auth", () => {
   const bare = fixture(path.join(root, "guard-bare"));
   cli(bare, ["init", "--no-install", "--defaults"]);
@@ -443,6 +458,8 @@ check("the already-correct tsconfig alias is left alone", () =>
 check("English copy is used throughout", () => {
   assert.match(read(b, "src/shared/api/error-catalog.ts"), /VALIDATION_ERROR: "Some fields are invalid/);
   assert.match(read(b, "src/_pages/login/ui/login-page.tsx"), /Sign in/);
+  // …and the Thai typography rules stay out of a project that renders none.
+  assert.doesNotMatch(read(b, "docs/fsd.md"), /Thai copy renders differently/);
 });
 check("the login route lands under src/app", () => assert.ok(has(b, "src/app/login/page.tsx")));
 

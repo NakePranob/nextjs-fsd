@@ -205,6 +205,7 @@ at the tree rather than assumed false.
 nextjs-fsd generate page settings
 nextjs-fsd generate page dashboard --auth
 nextjs-fsd generate page dashboard --route "(admin)/dashboard" --errors
+nextjs-fsd generate page dealers --client --model
 nextjs-fsd generate page loans --route "loans/[id]" --client
 nextjs-fsd g p settings --defaults
 ~~~
@@ -218,6 +219,7 @@ nextjs-fsd g p settings --defaults
 | --no-route | Write the slice only, no route file |
 | --client | Also create a `"use client"` leaf component |
 | --auth | The client leaf sits behind `useRequireSession` (needs `add auth`) |
+| --model | Add this page's TanStack Query hooks (needs `add error-handling`) |
 | --errors | Add this page's own error catalog (needs `add error-handling`) |
 | --defaults | Skip every question: server component only, route = the page name |
 
@@ -232,6 +234,7 @@ contribute nothing to the URL, so `--route "(admin)/dashboard"` serves
 src/_pages/dashboard/index.ts                     # public API — the only thing app/ imports
 src/_pages/dashboard/ui/dashboard-page.tsx        # server component + `metadata`
 src/_pages/dashboard/ui/dashboard-content.tsx     # --client / --auth: the "use client" leaf
+src/_pages/dashboard/model/dashboard.ts           # --model: query key, hooks, the record type
 src/_pages/dashboard/model/dashboard-errors.ts    # --errors: this page's error catalog
 app/(admin)/dashboard/page.tsx                    # re-exports the page and its metadata
 ~~~
@@ -242,6 +245,12 @@ anywhere.
 
 `"use client"` goes on the leaf, never on the page: a page component that
 needs the browser ships its whole tree to it.
+
+`--model` writes the same file a slice's `api` segment gets — a query key, a
+record type, a list query and a mutation that invalidates the key — into
+`model/`, because a page keeps what it knows about its own data in one
+segment. It stays internal to the slice: the page's `index.ts` exports the
+page, not its hooks.
 
 ## generate slice [layer] [name] — add a features/entities slice
 

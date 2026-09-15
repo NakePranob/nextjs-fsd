@@ -27,6 +27,15 @@ Duplicating a component across two pages is cheaper to undo than an
 `widgets/` — UI blocks carry user-flow logic, which makes the
 widget/feature boundary arbitrary — so reach for `features/` first.
 
+When the second consumer does appear and what it shares is *data* — the types
+and query hooks for one domain — `shared/<domain>/` is usually the honest
+home: `shared/auth`, `shared/product`, one file per capability. It bends
+"shared is infrastructure" a little, and it buys not paying for a layer whose
+whole promise is a third consumer that may never arrive. A `features/` slice
+is for a user *action* two pages perform, which is a different thing. The
+first project built this way passed seventeen pages without an `entities/`
+layer; do not treat creating one as the default step.
+
 ## Import boundary
 
 Imports point downwards only: `_app → _pages → widgets → features → entities
@@ -130,6 +139,55 @@ const t = useTranslations("errors");
 
 The codes stay the keys. They are the API's contract, not copy, so they do not
 translate.
+
+{{#if (eq locale "th")}}
+## Thai copy renders differently
+
+Three things Latin-tuned defaults get wrong. All three are invisible until
+someone reads the screen in Thai:
+
+- **Never put negative tracking on Thai.** `tracking-tight` and friends
+  collapse tone marks into the vowels beneath them, and Thai does not
+  letterspace for emphasis either, so a wide `tracking-*` reads as broken
+  rather than as a label.
+- **Nothing Thai goes inside a `font-mono` element.** A mono face loaded with
+  `subsets: ["latin"]` has no Thai glyph at all, so the string drops to a
+  system fallback mid-word. Split the branch instead of wrapping both sides.
+  Mono marks a value as literal — an id, a code, an account number — not
+  prose, and not a column of numbers you only want lined up.
+- **Line heights need room per text size.** Thai stacks up to two marks above
+  a consonant plus a vowel below, so Tailwind's defaults (1.2 at `text-3xl`)
+  drop one line's descenders into the next line's marks. Override
+  `--text-*--line-height` for every size the theme actually uses.
+
+{{/if}}
+
+## Forms, and inline or toast
+
+One question with one answer: does the user have to **fix** this, or only
+**know** it?
+
+- Something they must fix stays inline — every form error, and every failure
+  that replaces a screen. `<FormError>` is that half. A toast is gone in
+  seconds and points at no field, which is the wrong home for "your password
+  is wrong" while someone is still typing.
+- Something they only need to know goes to a toast — the result of a row
+  button, a checkbox in a matrix, anything whose banner would otherwise sit
+  far from the thing acted on.
+
+A toast helper takes a **finished sentence**, never an error. Resolving a code
+into copy belongs to the domain that raises it — the
+`resolve<Domain>Error(error, fallback)` beside its catalog — so the toast layer
+never learns that catalogs exist. Do not replace either half with a
+QueryClient-wide `mutationCache.onError`: one handler cannot name the action
+that failed, and it fires over the dialog errors that have to stay inline.
+
+Forms get **one helper, not per-field state written again in every form**:
+validate on submit, keep the messages in one place, and let the field
+component own the `aria-invalid` / `aria-describedby` wiring. Client
+validation is a courtesy — the API re-validates regardless — so name the
+server-side rule each field mirrors in a comment, and a drift costs a round
+trip rather than correctness.
 
 ## Generating
 

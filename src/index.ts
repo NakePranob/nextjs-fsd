@@ -94,6 +94,7 @@ generate
   .option("--no-route", "write the slice only, no route file")
   .option("--client", 'also create a "use client" leaf component')
   .option("--auth", "the client leaf sits behind useRequireSession (needs `add auth`)")
+  .option("--model", "add model/<name>.ts, this page's TanStack Query hooks (needs `add error-handling`)")
   .option("--errors", "add model/<name>-errors.ts, this page's own error catalog (needs `add error-handling`)")
   .option("--defaults", "skip every question; server component only, route = the page name")
   .action(async (name, opts) => {
@@ -107,6 +108,7 @@ generate
         routeFile: noRoute ? false : undefined,
         client: opts.client,
         auth: opts.auth,
+        model: opts.model,
         errors: opts.errors,
         defaults: opts.defaults,
       });

@@ -18,6 +18,7 @@ export interface PageOptions {
   routeFile?: boolean;
   client?: boolean;
   auth?: boolean;
+  model?: boolean;
   errors?: boolean;
   defaults?: boolean;
 }
@@ -34,7 +35,7 @@ export async function generatePage(rawName: string | undefined, opts: PageOption
     }));
   const naming = resolveNaming(name);
 
-  let { client, auth, errors } = opts;
+  let { client, auth, errors, model } = opts;
   let title = opts.title?.trim() || undefined;
   if (!opts.defaults) {
     if (auth === undefined && client === undefined) {
@@ -65,6 +66,12 @@ export async function generatePage(rawName: string | undefined, opts: PageOption
         })
       ).trim();
     }
+    if (model === undefined && config.features.errorHandling) {
+      model = await confirm({
+        message: `Add this page's query hooks (model/${naming.name}.ts)?`,
+        default: false,
+      });
+    }
     if (errors === undefined && config.features.errorHandling) {
       errors = await confirm({
         message: `Add an error catalog (model/${naming.name}-errors.ts)?`,
@@ -78,6 +85,12 @@ export async function generatePage(rawName: string | undefined, opts: PageOption
   }
   if (errors && !config.features.errorHandling) {
     throw new Error("--errors needs the error-handling feature — run `nextjs-fsd add error-handling` first");
+  }
+  if (model && !config.features.errorHandling) {
+    throw new Error(
+      "--model needs the error-handling feature — run `nextjs-fsd add error-handling` first.\n" +
+        "A bare fetch skips the bearer token, the single-flight 401 refresh, and the conversion into ApiError."
+    );
   }
 
   const route = opts.route === undefined ? naming.name : normalizeRoute(opts.route);
@@ -120,6 +133,15 @@ export async function generatePage(rawName: string | undefined, opts: PageOption
         when: () => hasContent,
       },
       {
+        // The same template a slice's api segment gets: a page is a slice too,
+        // and its requests have no reason to be shaped differently. It lands in
+        // model/ rather than api/, because a page keeps what it knows about its
+        // own data in one segment.
+        template: "generate/slice/api.ts.hbs",
+        output: `${slice}/model/${naming.name}.ts`,
+        when: () => Boolean(model),
+      },
+      {
         template: "generate/page/errors.ts.hbs",
         output: `${slice}/model/${naming.name}-errors.ts`,
         when: () => Boolean(errors),
@@ -137,7 +159,7 @@ export async function generatePage(rawName: string | undefined, opts: PageOption
   if (extending && written.length === 0) {
     throw new Error(
       `${slice} already has everything this would write.\n` +
-        "Pass --client or --errors to add a leaf component or an error catalog to it."
+        "Pass --client, --model or --errors to add a leaf component, the query hooks, or an error catalog to it."
     );
   }
   report(written);
