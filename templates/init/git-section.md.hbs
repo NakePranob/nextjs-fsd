@@ -1,0 +1,19 @@
+
+## Commits
+
+Subjects are Conventional Commits — `type(optional-scope): what changed` — and
+{{#if huskyOwnsHooks}}`.husky/commit-msg`{{else}}`.githooks/commit-msg`{{/if}} checks that shape on every commit. What language you
+write in, whether a ticket number rides along, and whether you use an emoji are
+this project's calls: write them down here, and extend that hook if you want
+them enforced too. The body is free — it is where *why* goes, and why is what a
+diff cannot say for itself.
+{{#unless huskyOwnsHooks}}
+
+Hooks are per-clone, so a fresh checkout needs one line before they run:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+`nextjs-fsd init` ran it for the clone it was run in.
+{{/unless}}

@@ -151,6 +151,7 @@ refuses rather than re-writing, and points at `generate` and `add`.
 |---|---|
 | --locale \<th\|en\> | Language for generated user-facing copy; Thai is the default |
 | --no-install | Write everything but do not run the package manager |
+| --no-hooks | Write no `commit-msg` hook and leave `core.hooksPath` alone |
 | --defaults | Skip every question, including the confirmation summary |
 | -y, --yes | Skip only the confirmation summary |
 
@@ -164,6 +165,12 @@ refuses rather than re-writing, and points at `generate` and `add`.
   so `@/_pages/login` resolves while any existing `@/…` import keeps working
 - spreads the generated ESLint rules into `eslint.config.mjs` and appends
   `steiger ./src` to the `lint` script
+- writes a `commit-msg` hook and points `core.hooksPath` at it, unless the
+  repository has husky (which owns that setting — the hook goes to `.husky/`
+  and nothing is configured), the setting already points somewhere else, or
+  there is no repository yet. The hook checks the **shape** of the subject and
+  nothing else: language, ticket numbers and emoji stay your project's call,
+  and the AGENTS.md section it adds says so. `--no-hooks` skips all of it
 
 `init` is the one command that runs on work you already have, so it writes
 what is missing and leaves what is there, naming each file it left alone.
@@ -188,6 +195,7 @@ docs/fsd.md                            # the convention, in full
 <repo>/.agents/skills/nextjs-fsd/      # the same contract, as a skill
 <repo>/.claude/skills/nextjs-fsd       # symlink to it, for Claude Code
 AGENTS.md                              # an FSD section appended, or created
+<repo>/.githooks/commit-msg            # subject must be a Conventional Commit
 CLAUDE.md                              # created if absent, includes AGENTS.md
 nextjs-fsd.config.json                 # layers, appDir, alias, locale, features
 ~~~
