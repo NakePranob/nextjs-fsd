@@ -27,10 +27,24 @@ cases live. `scripts/smoke-test.mjs` drives the real binary through
 init → add → generate → extend against a fixture and inspects the output; it
 needs no network and no package install.
 
-The smoke test also **type-checks its generated output**: it symlinks this
-repo's `node_modules` into each fixture and runs `tsc`, which is why `next`,
-`react` and the query/axios types are devDependencies here. They are never
-shipped (`files` carries `dist`, `templates`, `bin`, `LICENSE`).
+The smoke test also **type-checks its generated output** and **runs steiger
+over it**: it symlinks this repo's `node_modules` into each fixture, which is
+why `next`, `react`, the query/axios types, `steiger` and its FSD plugin are
+devDependencies here. They are never shipped (`files` carries `dist`,
+`templates`, `bin`, `LICENSE`).
+
+Running the linter matters more than it sounds. Reading a generated
+`steiger.config.ts` and asserting on its text cannot tell a working config
+from an inert one — a rule name the plugin does not have, or a severity that
+is wrong, both read fine. That gap shipped a regression: the
+`fsd/insignificant-slice` override was deleted on the belief that the rule no
+longer existed, and only `test:integration` noticed, in CI, an install later.
+The fixture check now adds the one import that gives a slice exactly one
+consumer and asserts steiger *warns* and still exits 0.
+
+steiger prints its findings to **stderr** and exits 0 for a warning, so that
+check reads both streams. A version of it that only read stdout passes against
+a linter that said nothing at all.
 
 ```bash
 pnpm run test:integration   # slow, networked: real create-next-app + install + next build
@@ -42,6 +56,7 @@ Three checks, three different failures, none subsuming another:
 |---|---|---|
 | assertions on generated text | a template that stopped emitting something | anything that only fails at compile time |
 | `tsc` on the fixture | a template emitting broken TypeScript | a dependency the CLI forgot to declare — the fixture borrows this repo's `node_modules`, so the import resolves anyway |
+| `steiger` on the fixture | a generated lint config that is inert, or has a severity that fails `lint` on brand-new code | a rule that only misfires against a shape the fixture does not have |
 | `test:integration` | a declared range that does not resolve, Next.js behaviour drift | speed; it needs minutes and a network |
 
 That middle row is why `@types/bun` has an explicit dependency assertion of its

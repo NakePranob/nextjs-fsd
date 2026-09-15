@@ -7,7 +7,7 @@
 // generated a project by hand. No network and no package install: the fixture
 // below is the parts of a create-next-app project this CLI actually reads.
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
 import fs from "node:fs";
 import os from "node:os";
@@ -90,14 +90,49 @@ function fixture(dir, { srcApp = false, lockfile } = {}) {
  * is enough for tsc, which is why the frontend types are devDependencies here.
  * A separate tsconfig so the one init wrote stays intact for the assertions.
  */
-function typecheck(dir, label) {
-  const cliRoot = path.join(import.meta.dirname, "..");
+const cliRoot = path.join(import.meta.dirname, "..");
+
+/**
+ * Points a fixture at this repo's node_modules.
+ *
+ * The fixtures are in a temp directory, so nothing resolves by walking up —
+ * neither tsc looking for react's types nor steiger looking for its own
+ * plugin. One symlink gives both.
+ */
+function linkModules(dir) {
   const modules = path.join(dir, "node_modules");
   if (!fs.existsSync(modules)) {
     // "junction" on Windows: a directory symlink there needs elevation or
     // Developer Mode, a junction needs neither. Both want an absolute target.
     fs.symlinkSync(path.join(cliRoot, "node_modules"), modules, process.platform === "win32" ? "junction" : "dir");
   }
+}
+
+/**
+ * Runs the real steiger over a fixture, with the config the CLI wrote.
+ *
+ * The rest of this file reads generated files and asserts on their contents,
+ * which cannot tell a working config from an inert one: a rule name the plugin
+ * does not have, or a severity that turns out to be wrong, both read fine.
+ * That gap shipped a regression once — the integration test caught it, but
+ * only in CI, an install and ninety seconds later.
+ */
+function steiger(dir) {
+  linkModules(dir);
+  // spawnSync, not execFileSync: steiger prints its findings to stderr and
+  // exits 0 for a warning, so the stdout a successful execFileSync returns is
+  // empty either way — a check reading that would pass on a linter that said
+  // nothing at all.
+  const run = spawnSync(
+    process.execPath,
+    [path.join(cliRoot, "node_modules", "steiger", "dist", "cli.mjs"), "./src"],
+    { cwd: dir, encoding: "utf8" }
+  );
+  return { status: run.status, output: `${run.stdout ?? ""}${run.stderr ?? ""}` };
+}
+
+function typecheck(dir, label) {
+  linkModules(dir);
 
   // Next writes route-prop types into .next/types during a build; declared
   // here so a typecheck does not need a build to have happened first.
@@ -606,6 +641,34 @@ check("a project with its own import rules does not get a second set", () => {
   assert.ok(!has(d, "eslint.fsd.mjs"));
   assert.doesNotMatch(read(d, "eslint.config.mjs"), /fsdBoundary/);
   assert.match(brownfield, /left alone: eslint\.fsd\.mjs/);
+});
+
+// ------------------------------------------------- the generated lint config
+
+console.log("\nsteiger, for real");
+check("a generated project passes the steiger config the CLI wrote it", () => {
+  const { status, output } = steiger(a);
+  assert.equal(status, 0, output);
+});
+check("insignificant-slice warns on a one-consumer slice instead of failing lint", () => {
+  // A slice with one reference is every slice on the day it is created, and
+  // at the rule's default severity that is a failed lint on brand-new code.
+  // The config turns it down to a warning; this is the check that the turning
+  // down still works, which reading the config file cannot tell you.
+  //
+  // Zero references is a different case the rule says nothing about, which is
+  // why the import below has to exist for this to mean anything.
+  const content = path.join(a, "src", "_pages", "dashboard", "ui", "dashboard-content.tsx");
+  const before = fs.readFileSync(content, "utf8");
+  fs.writeFileSync(content, `import { LoanApplication } from "@/features/loan-application";\n${before}\nexport const used = LoanApplication;\n`);
+  try {
+    const { status, output } = steiger(a);
+    assert.match(output, /insignificant-slice/);
+    assert.match(output, /warning/);
+    assert.equal(status, 0, "a warning must not fail lint");
+  } finally {
+    fs.writeFileSync(content, before);
+  }
 });
 
 // ------------------------------------------------------- typecheck the output
