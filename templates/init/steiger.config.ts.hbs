@@ -15,4 +15,14 @@ export default defineConfig([
     files: ["./{{srcDir}}/_app/providers/**"],
     rules: { "fsd/segments-by-purpose": "off" },
   },
+  {
+    // A warning, not an error, because at default severity this fails `lint`
+    // on the structure FSD's own guidance calls the normal starting point: a
+    // slice extracted for its first consumer, before the second one exists.
+    // The message is still worth reading — a slice that stays at one consumer
+    // for good probably belongs inside it — but a fresh slice failing CI
+    // teaches people to delete the linter rather than the slice.
+    files: ["./{{srcDir}}/**"],
+    rules: { "fsd/insignificant-slice": "warn" },
+  },
 ]);

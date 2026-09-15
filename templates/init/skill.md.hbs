@@ -174,12 +174,13 @@ After generating and filling in a slice:
 {{packageManager}} run build
 ~~~
 
-ESLint owns the import boundary — `@feature-sliced/steiger-plugin` 0.7 has no
-import rules — and reports a wrong-way or slice-internal import at the file as
-you type it. steiger reports what no single file can show: a slice with no
-public API, a slice with no segments, a layer sliced too finely, naming that
-drifted. Neither one reports a slice that has only one consumer; that is a
-review question, not a lint error.
+Both report a wrong-way or slice-internal import — ESLint at the file as you
+type it, steiger over the whole tree. ESLint is not there because steiger
+cannot see imports; it is there because a rule you meet on save is a rule you
+stop breaking. steiger also reports what no single file can show:
+`fsd/insignificant-slice` on a brand-new slice means nothing imports it yet —
+either wire it up or inline it back into its single consumer; it is the linter
+working, not a false positive.
 
 Where the CLI wrote a `client.test.ts`, run the project's test command too. Do
 not delete that test to make a change pass: the single-flight 401 refresh and

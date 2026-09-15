@@ -253,13 +253,13 @@ check("the root layout imports the moved stylesheet", () =>
 check("srcDir goes first in the tsconfig alias, root kept as a fallback", () =>
   assert.deepEqual(JSON.parse(read(a, "tsconfig.json")).compilerOptions.paths["@/*"], ["./src/*", "./*"])
 );
-check("steiger.config.ts configures only rules the pinned plugin still has", () => {
-  // 0.7 dropped fsd/insignificant-slice along with the import rules, and a
-  // rule name the plugin does not export is ignored in silence — which is how
-  // a block that configures nothing survives, comment and all.
-  const config = read(a, "steiger.config.ts");
-  assert.doesNotMatch(config, /insignificant-slice|forbidden-imports|no-cross-imports|public-api-sidestep/);
-  assert.match(config, /"fsd\/typo-in-layer-name": "off"/);
+check("insignificant-slice is a warning, so a fresh slice does not fail lint", () => {
+  // At default severity steiger errors on any slice with one consumer, which
+  // is every slice on the day it is created — `lint` would fail on the
+  // structure FSD's own guidance recommends starting from. Only the
+  // integration test can catch this: it installs the plugin and runs lint for
+  // real, where the smoke test only reads the config it wrote.
+  assert.match(read(a, "steiger.config.ts"), /"fsd\/insignificant-slice": "warn"/);
 });
 check("both linters are chained into lint", () =>
   assert.equal(JSON.parse(read(a, "package.json")).scripts.lint, "eslint && steiger ./src")

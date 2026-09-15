@@ -58,14 +58,18 @@ in two pages while you are still unsure is the cheaper mistake.
 | | catches | when |
 |---|---|---|
 | **ESLint** (`eslint.fsd.mjs`) | this import points the wrong way, or reaches past a slice's `index.ts` | as you type, per file, in the editor |
-| **steiger** (`steiger.config.ts`) | a slice with no public API, a slice with no segments, a layer sliced too finely, a segment named after its type, inconsistent naming | on demand, whole tree |
+| **steiger** (`steiger.config.ts`) | the same imports, plus a slice with no references, a layer sliced too finely, a segment named after its type, inconsistent naming | on demand, whole tree |
 
-They do not overlap, and neither one covers for the other.
-`@feature-sliced/steiger-plugin` 0.7 dropped its import rules, so **ESLint is
-the only thing checking the boundary** — do not delete `eslint.fsd.mjs` on the
-grounds that steiger repeats it, because it does not. In the other direction,
-nothing in one file can show that a slice has no consumers or that a layer has
-thirty slices; that needs the whole tree, which is what steiger walks.
+The overlap on imports is deliberate, not an oversight to clean up. steiger's
+`fsd/forbidden-imports`, `fsd/no-cross-imports` and `fsd/no-public-api-sidestep`
+do check the boundary — ESLint is not covering a gap in the plugin. It is
+covering a gap in *timing*: steiger walks the tree when you run it, and a rule
+you only meet in CI is a rule you have already built ten files on top of. Do
+not delete the ESLint half on the grounds that steiger repeats it.
+
+The other direction has no overlap at all: nothing in one file can show that a
+slice has no consumers or that a layer has thirty slices, so that half only
+works whole-tree.
 
 `eslint.fsd.mjs` has no dependencies of its own: the boundary is expressed
 with the core `no-restricted-imports` rule, and the layer order above is the
@@ -74,11 +78,13 @@ options when a later block matches the same file instead of merging them, so
 every pattern for a layer has to stay in that layer's single block. Split them
 across two blocks and the earlier one silently stops applying.
 
-The "add layers when a second consumer appears" rule is **not** enforced by a
-linter. `fsd/insignificant-slice` used to report a slice with a single
-reference, but the 0.7 plugin dropped it along with the import rules. So the
-one-consumer question is a review question: a slice that never gains a second
-consumer belongs inside the first.
+When steiger says *"this slice has only one reference — consider merging
+them"*, that is the "add layers when a second consumer appears" rule talking,
+not a false positive. It is configured as a **warning** rather than an error,
+because every slice has one consumer on the day it is created and failing the
+build for that teaches people to delete the rule instead of the slice. Read it
+anyway: a slice that stays at one consumer for good probably belongs inside
+that consumer.
 
 ## `{{appDir}}/` stays thin
 

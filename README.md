@@ -628,12 +628,10 @@ is always entered through its `index.ts`.
 | | Catches | When |
 |---|---|---|
 | ESLint (`eslint.fsd.mjs`) | This import points the wrong way, or reaches past a slice's `index.ts` | As you type, per file, in the editor |
-| steiger (`steiger.config.ts`) | A slice with no public API, a slice with no segments, a layer sliced too finely, a segment named after its type | On demand, whole tree |
+| steiger (`steiger.config.ts`) | A slice with no references, a layer sliced too finely, a segment named after its type | On demand, whole tree |
 
-They do not overlap. `@feature-sliced/steiger-plugin` 0.7 dropped its import
-rules, so ESLint is the only thing checking the boundary — and a bad import is
-visible in one file, which is where that check belongs. Nothing in one file
-can show that a slice has no segments or that a layer has thirty of them.
+A bad import is visible in one file, so that check belongs where it is
+instant. Nothing in one file can show that a slice has no consumers.
 
 `eslint.fsd.mjs` adds no dependency: the boundary is expressed with the core
 `no-restricted-imports` rule, and the layer order is the whole of it. One trap
@@ -641,11 +639,12 @@ if you edit it — flat config **replaces** a rule's options when a later block
 matches the same file rather than merging them, so all of a layer's patterns
 have to stay in that layer's single block.
 
-"Add a layer when a second consumer appears" is **not** enforced by either
-linter. `fsd/insignificant-slice` used to report a slice with a single
-reference, but the 0.7 plugin dropped it, so the one-consumer question is a
-review question: a slice that never gains a second consumer belongs inside the
-first.
+steiger's `insignificant-slice` is configured as a **warning**. At its default
+severity it fails `lint` on the structure FSD's own guidance recommends
+starting from — a slice extracted for its first consumer — and a fresh slice
+failing CI teaches people to delete the rule rather than the slice. Read the
+message anyway: a slice that stays at one consumer for good probably belongs
+inside it.
 
 ## Generated copy and locale
 

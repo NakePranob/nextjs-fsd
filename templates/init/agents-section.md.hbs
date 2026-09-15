@@ -11,7 +11,7 @@ Rules that are easy to break without noticing:
 - imports point downwards only, and a slice is imported through its `index.ts`
 - `{{appDir}}/<route>/page.tsx` re-exports the FSD page **and its `metadata`** — nothing else
 - `"use client"` goes on the leaf that needs it, not on the page
-- `{{lintCommand}}` runs both linters, and they do not overlap: ESLint (`eslint.fsd.mjs`) owns the import boundary — the 0.7 steiger plugin has no import rules — and flags it per file as you type; steiger (`steiger.config.ts`) flags what one file cannot show — a slice with no public API, a segmentless slice, a layer sliced too finely, naming that drifted
+- `{{lintCommand}}` runs both linters: ESLint (`eslint.fsd.mjs`) flags a wrong-way or slice-internal import per file as you type, steiger (`steiger.config.ts`) flags the same imports plus what one file cannot show — a slice with no consumers, a layer sliced too finely
 - editing `eslint.fsd.mjs`: flat config replaces a rule's options when a later block matches the same file, so all of a layer's `no-restricted-imports` patterns must stay in that layer's one block
 
 Agents also load this as a skill at `.agents/skills/nextjs-fsd/SKILL.md` in

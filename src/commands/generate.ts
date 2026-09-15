@@ -342,8 +342,8 @@ export async function generateSlice(
   if (extending) console.log(pc.dim(`\nextended the existing ${naming.name} slice; untouched files were left alone.`));
   console.log(
     `\n${pc.dim("imported as")} import { ${naming.pascal} } from "${config.alias}/${layer}/${naming.name}";` +
-      `\n${pc.dim("only through that index.ts — reaching into ui/ is the boundary violation ESLint reports.")}` +
-      `\n${pc.dim("a slice that never gains a second consumer belongs inside the first — no linter checks that, so it is on review.")}`
+      `\n${pc.dim("only through that index.ts — reaching into ui/ is the boundary violation steiger reports.")}` +
+      `\n${pc.dim("until something imports it, steiger reports fsd/insignificant-slice — that is the linter working, not a mistake.")}`
   );
 }
 
