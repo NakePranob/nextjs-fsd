@@ -146,6 +146,11 @@ Breaking one of these is silent — the build passes and the app is wrong.
   failed. A backend message is written for a log.
 - **One catalog per domain, never one global map.** `generate ... --errors`
   creates it in the right place.
+- **A catalog is a plain object, so i18n needs no second shape.** In a project
+  with a translator, build it where it is rendered — `catalogs={[{ CONFLICT:
+  t("conflict") }]}` — and keep the codes as the keys; they are the API's
+  contract, not copy. The CLI's `locale` only decides what the first draft
+  reads like.
 - **The access token stays in the module variable** in
   `{{srcDir}}/shared/auth/access-token.ts`. Never move it to `localStorage`, and
   never remove the single-flight guard in `shared/api/client.ts` — a backend
@@ -161,13 +166,12 @@ After generating and filling in a slice:
 {{packageManager}} run build
 ~~~
 
-Both report a wrong-way or slice-internal import — ESLint at the file as you
-type it, steiger over the whole tree. ESLint is not there because steiger
-cannot see imports; it is there because a rule you meet on save is a rule you
-stop breaking. steiger also reports what no single file can show:
-`fsd/insignificant-slice` on a brand-new slice means nothing imports it yet —
-either wire it up or inline it back into its single consumer; it is the linter
-working, not a false positive.
+ESLint owns the import boundary — `@feature-sliced/steiger-plugin` 0.7 has no
+import rules — and reports a wrong-way or slice-internal import at the file as
+you type it. steiger reports what no single file can show: a slice with no
+public API, a slice with no segments, a layer sliced too finely, naming that
+drifted. Neither one reports a slice that has only one consumer; that is a
+review question, not a lint error.
 
 Where the CLI wrote a `client.test.ts`, run the project's test command too. Do
 not delete that test to make a change pass: the single-flight 401 refresh and

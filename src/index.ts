@@ -140,13 +140,15 @@ generate
   .description("scaffold a shared route shell in _app/layouts plus the layout.tsx that re-exports it")
   .option("--route <path>", 'where it applies; defaults to the route group "(<name>)". A real segment works too: "admin"')
   .option("--no-route", "write the component only, no layout.tsx")
-  .option("--defaults", "skip every question; route = the (<name>) group")
+  .option("--guard", "every route under it sits behind the session, in one component (needs `add auth`)")
+  .option("--defaults", "skip every question; route = the (<name>) group, no guard")
   .action(async (name, opts) => {
     try {
       const noRoute = opts.route === false;
       await generateLayout(name, {
         route: noRoute ? undefined : opts.route,
         routeFile: noRoute ? false : undefined,
+        guard: opts.guard,
         defaults: opts.defaults,
       });
     } catch (err) {

@@ -152,6 +152,16 @@ export async function generatePage(rawName: string | undefined, opts: PageOption
       );
     }
   }
+  if (auth) {
+    const layoutGuard = findLayoutGuard(process.cwd(), config.srcDir);
+    if (layoutGuard !== undefined) {
+      console.log(
+        pc.yellow(`\n${layoutGuard} already guards the routes under it.`) +
+          "\nIf this page routes under that layout, drop the useRequireSession call from" +
+          ` ui/${naming.name}-content.tsx and use useSession() — two components redirecting on the same failed session race each other.`
+      );
+    }
+  }
   if (existingRoute !== undefined) {
     console.log(
       pc.dim(`\nalready routed from ${existingRoute} — left alone rather than adding a second page.tsx for the same URL.`)
@@ -310,8 +320,8 @@ export async function generateSlice(
   if (extending) console.log(pc.dim(`\nextended the existing ${naming.name} slice; untouched files were left alone.`));
   console.log(
     `\n${pc.dim("imported as")} import { ${naming.pascal} } from "${config.alias}/${layer}/${naming.name}";` +
-      `\n${pc.dim("only through that index.ts — reaching into ui/ is the boundary violation steiger reports.")}` +
-      `\n${pc.dim("until something imports it, steiger reports fsd/insignificant-slice — that is the linter working, not a mistake.")}`
+      `\n${pc.dim("only through that index.ts — reaching into ui/ is the boundary violation ESLint reports.")}` +
+      `\n${pc.dim("a slice that never gains a second consumer belongs inside the first — no linter checks that, so it is on review.")}`
   );
 }
 
@@ -335,6 +345,22 @@ function findRouteFor(projectDir: string, appDir: string, alias: string, name: s
     }
   }
   return undefined;
+}
+
+/**
+ * The layout guard that already calls useRequireSession, if there is one.
+ *
+ * Read from the file rather than the config, because what matters is whether a
+ * shell guards its routes — not whether this CLI is what wrote it.
+ */
+function findLayoutGuard(projectDir: string, srcDir: string): string | undefined {
+  const dir = path.join(projectDir, srcDir, "_app", "layouts");
+  if (!fs.existsSync(dir)) return undefined;
+  const file = fs
+    .readdirSync(dir)
+    .filter((entry) => entry.endsWith(".tsx"))
+    .find((entry) => fs.readFileSync(path.join(dir, entry), "utf8").includes("useRequireSession"));
+  return file === undefined ? undefined : `${srcDir}/_app/layouts/${file}`;
 }
 
 function slicePath(srcDir: string, layer: string, name: string): string {
@@ -387,6 +413,21 @@ function parseSegments(value: string): Segment[] {
   return [...new Set(parsed)] as Segment[];
 }
 
+/**
+ * Whether the routes under a new layout should sit behind the session.
+ *
+ * Not asked without auth installed (there is nothing to guard with), and not
+ * asked off a TTY — `generate layout <name>` has to keep working in CI, where
+ * a prompt would turn a working command into an error.
+ */
+async function askGuard(hasAuth: boolean, defaults: boolean | undefined): Promise<boolean> {
+  if (defaults || !hasAuth || !process.stdin.isTTY) return false;
+  return confirm({
+    message: "Put every route under this layout behind the session (useRequireSession)?",
+    default: false,
+  });
+}
+
 function toTitleCase(kebab: string): string {
   return kebab
     .split("-")
@@ -424,6 +465,7 @@ function assertSliceInputs(
 export interface LayoutOptions {
   route?: string;
   routeFile?: boolean;
+  guard?: boolean;
   defaults?: boolean;
 }
 
@@ -436,6 +478,11 @@ export interface LayoutOptions {
  * composition lives. The route file defaults to a route group — `(admin)` —
  * because that is a layout's usual reason to exist: shared chrome for a set of
  * pages, contributing nothing to the URL.
+ *
+ * `--guard` puts every route under it behind the session, in one component.
+ * That is where a guard belongs: a page that checks for itself is fine alone
+ * and races the shell as soon as both check, and "every signed-in screen" is a
+ * property of the shell, not something each page should re-declare.
  */
 export async function generateLayout(rawName: string | undefined, opts: LayoutOptions): Promise<void> {
   const config = readConfig(process.cwd());
@@ -449,13 +496,18 @@ export async function generateLayout(rawName: string | undefined, opts: LayoutOp
     }));
   const naming = resolveNaming(name);
 
+  const guard = opts.guard ?? (await askGuard(config.features.auth, opts.defaults));
+  if (guard && !config.features.auth) {
+    throw new Error("--guard needs the auth feature — run `nextjs-fsd add auth` first");
+  }
+
   // "(admin)" rather than "admin": a layout's default home is a route group,
   // which shares chrome without adding a URL segment.
   const route = opts.route === undefined ? `(${naming.name})` : normalizeRoute(opts.route);
   const routeCheck = validateRoute(route);
   if (routeCheck !== true) throw new Error(routeCheck);
 
-  const context = { ...naming, ...config, copy: copyFor(config.locale) };
+  const context = { ...naming, ...config, copy: copyFor(config.locale), guard };
   const layouts = `${config.srcDir}/_app/layouts`;
   // Same rule as page and slice: an existing layout is being extended (given a
   // route file it did not have), not recreated.
@@ -464,6 +516,11 @@ export async function generateLayout(rawName: string | undefined, opts: LayoutOp
     process.cwd(),
     [
       { template: "generate/layout/layout.tsx.hbs", output: `${layouts}/${naming.name}-layout.tsx` },
+      {
+        template: "generate/layout/guard.tsx.hbs",
+        output: `${layouts}/${naming.name}-guard.tsx`,
+        when: () => guard,
+      },
       {
         template: "generate/layout/route.tsx.hbs",
         output: path.posix.join(config.appDir, route, "layout.tsx"),
@@ -481,12 +538,30 @@ export async function generateLayout(rawName: string | undefined, opts: LayoutOp
     );
   }
 
+  // The layout itself was left alone when extending, so a guard added now is
+  // not rendering anything yet. Say the two lines that wire it.
+  if (extending && written.some((file) => file.endsWith(`${naming.name}-guard.tsx`))) {
+    console.log(
+      pc.yellow(`${layouts}/${naming.name}-layout.tsx does not render it yet — add:`) +
+        `\n  import { ${naming.pascal}Guard } from "./${naming.name}-guard";` +
+        `\n  <${naming.pascal}Guard>{children}</${naming.pascal}Guard>`
+    );
+  }
+
   if (appendExport(process.cwd(), `${layouts}/index.ts`, `export { ${naming.pascal}Layout } from "./${naming.name}-layout";`)) {
     written.push(`${layouts}/index.ts`);
   }
   await formatFiles(process.cwd(), [`${layouts}/index.ts`]);
 
   report(written);
+  if (guard) {
+    console.log(
+      pc.dim(
+        `\nevery route under this layout is behind ${naming.pascal}Guard — the pages below call useSession() and trust it.` +
+          "\nDo not also generate one with `generate page --auth`: two components redirecting on the same failed session race each other."
+      )
+    );
+  }
   if (opts.routeFile === false) {
     console.log(pc.yellow("\nno route file — add a layout.tsx that re-exports it when you want it applied."));
   } else {

@@ -253,11 +253,13 @@ check("the root layout imports the moved stylesheet", () =>
 check("srcDir goes first in the tsconfig alias, root kept as a fallback", () =>
   assert.deepEqual(JSON.parse(read(a, "tsconfig.json")).compilerOptions.paths["@/*"], ["./src/*", "./*"])
 );
-check("insignificant-slice is a warning, so a fresh slice does not fail lint", () => {
-  // At default severity steiger errors on any slice with one consumer, which
-  // is every slice on the day it is created — `lint` would fail on the
-  // structure FSD's own guidance recommends starting from.
-  assert.match(read(a, "steiger.config.ts"), /"fsd\/insignificant-slice": "warn"/);
+check("steiger.config.ts configures only rules the pinned plugin still has", () => {
+  // 0.7 dropped fsd/insignificant-slice along with the import rules, and a
+  // rule name the plugin does not export is ignored in silence — which is how
+  // a block that configures nothing survives, comment and all.
+  const config = read(a, "steiger.config.ts");
+  assert.doesNotMatch(config, /insignificant-slice|forbidden-imports|no-cross-imports|public-api-sidestep/);
+  assert.match(config, /"fsd\/typo-in-layer-name": "off"/);
 });
 check("both linters are chained into lint", () =>
   assert.equal(JSON.parse(read(a, "package.json")).scripts.lint, "eslint && steiger ./src")
@@ -401,6 +403,28 @@ check("a layout lands in _app/layouts with a route-group layout.tsx", () => {
   assert.match(read(a, "src/_app/layouts/index.ts"), /export \{ AdminLayout \}/);
 });
 
+const guarded = cli(a, ["generate", "layout", "portal", "--guard", "--defaults"]);
+check("--guard puts the one useRequireSession in the shell, and the layout renders it", () => {
+  assertFiles(a, ["src/_app/layouts/portal-guard.tsx", "src/_app/layouts/portal-layout.tsx"]);
+  assert.match(read(a, "src/_app/layouts/portal-guard.tsx"), /useRequireSession/);
+  assert.match(read(a, "src/_app/layouts/portal-layout.tsx"), /<PortalGuard>\{children\}<\/PortalGuard>/);
+  assert.doesNotMatch(guarded, /\{\{/);
+});
+check("a page that would guard itself under a guarded shell is told", () =>
+  assert.match(
+    cli(a, ["generate", "page", "portal-home", "--auth", "--route", "(portal)/home", "--defaults"]),
+    /already guards the routes under it/
+  )
+);
+check("--guard is refused without auth", () => {
+  const bare = fixture(path.join(root, "guard-bare"));
+  cli(bare, ["init", "--no-install", "--defaults"]);
+  assert.match(
+    cliFails(bare, ["generate", "layout", "admin", "--guard", "--defaults"]),
+    /needs the auth feature/
+  );
+});
+
 // -------------------------------------------------------------- src/app/ + en
 
 console.log("\nsrc/app/ layout, English copy");
@@ -454,8 +478,26 @@ check("a bun project gets the ?next= guard test too", () => {
 check("the login form picks ?next= back up instead of always landing home", () =>
   assert.match(read(c, "src/_pages/login/ui/login-form.tsx"), /router\.replace\(safeNext\(/)
 );
-check("a 401 from anywhere drops the session entry", () => {
+check("a logout leaves the page from the one place that ends the session", () => {
+  // Clearing the cache does not re-render a component that is not otherwise
+  // re-rendering, so a redirect left to each call site is one a call site
+  // forgets: the shell keeps drawing the session it had already read.
+  const session = read(c, "src/shared/auth/session.ts");
+  assert.match(session, /router\.replace\("\/login"\)/);
+  assert.equal(session.match(/router\.replace/g).length, 1);
+});
+check("someone already signed in is sent past the login form", () =>
+  assert.match(read(c, "src/_pages/login/ui/login-form.tsx"), /if \(session\.isSuccess\) signedIn\(\)/)
+);
+check("a 401 from anywhere resets the session entry rather than removing it", () => {
   const queryClient = read(c, "src/shared/api/query-client.ts");
+  // removeQueries does not notify the observers mounted on the entry, so a
+  // sidebar or a guard that was not re-rendering goes on showing a session
+  // that is over, and nothing ever sees isError.
+  assert.match(queryClient, /resetQueries\(\{ queryKey: sessionKey \}\)/);
+  // The call, not the prose: the comment above it names removeQueries to say
+  // why it is wrong.
+  assert.doesNotMatch(queryClient, /client\.removeQueries/);
   assert.match(queryClient, /export const sessionKey/);
   assert.match(queryClient, /mutationCache: new MutationCache/);
   // shared/auth may not exist at all (error handling installs alone), so the

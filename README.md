@@ -302,6 +302,7 @@ is a type nothing can annotate against without breaking the import boundary.
 ~~~bash
 nextjs-fsd generate layout admin                  # applies at app/(admin)/
 nextjs-fsd generate layout auth --route "(auth)"
+nextjs-fsd generate layout admin --guard           # every route under it needs a session
 nextjs-fsd generate layout admin --route reports   # reuse it at another path
 nextjs-fsd g l admin --defaults
 ~~~
@@ -312,15 +313,24 @@ nextjs-fsd g l admin --defaults
 |---|---|
 | --route \<path\> | Where it applies; defaults to the route group `(<name>)` |
 | --no-route | Write the component only, no `layout.tsx` |
-| --defaults | Skip every question: route = the `(<name>)` group |
+| --guard | Every route under it sits behind the session, in one component (needs `add auth`) |
+| --defaults | Skip every question: route = the `(<name>)` group, no guard |
 
 ### What it generates
 
 ~~~text
 src/_app/layouts/admin-layout.tsx   # the shell component
+src/_app/layouts/admin-guard.tsx    # --guard only: the one useRequireSession caller
 src/_app/layouts/index.ts           # public API of the layouts segment
 app/(admin)/layout.tsx              # re-exports it as default
 ~~~
+
+A guard belongs to the shell, not to each page under it. One page checking for
+itself is fine; the second one is a race, because two components redirecting
+on the same failed session fight over the same navigation. With `--guard` the
+pages below call `useSession()` and trust what it says — so do not also
+generate them with `generate page --auth`, which the CLI warns about when it
+finds a guarded layout.
 
 Layouts live in `_app`, not `_pages`: a layout is not one route's content, it
 is what several routes have in common, and cross-page composition is the app
@@ -445,11 +455,19 @@ script on a bun project.
   signed in on that browser.
 - **A 401 that survives the refresh ends the session, whichever request found
   it.** The refresh cookie is gone by then — revoked, expired, or logged out
-  everywhere — so the QueryClient drops `sessionKey` and `useRequireSession`
-  redirects. Without it the session query stays fresh for its whole
-  `staleTime` while every other request 401s: a page that looks signed in and
-  does nothing. Mutations count too; the save that will never submit is the
-  one that matters.
+  everywhere — so the QueryClient **resets** `sessionKey` and
+  `useRequireSession` redirects. Without it the session query stays fresh for
+  its whole `staleTime` while every other request 401s: a page that looks
+  signed in and does nothing. Mutations count too; the save that will never
+  submit is the one that matters. `resetQueries`, not `removeQueries`:
+  removing an entry does not notify the observers mounted on it, so a sidebar
+  or a guard that was not re-rendering anyway keeps drawing the session it had
+  already read, and nothing ever sees `isError`.
+- **Signing out leaves the page, from one place.** `useLogout` redirects to
+  `/login` inside the function that ends the session, not from each button's
+  `onSettled` — for the same reason: clearing the cache does not re-render a
+  component that is not otherwise re-rendering, and a call site that forgets
+  the line looks signed in until something else happens to refetch.
 - **Copy lives in a per-domain catalog, never one global map.** The domain that
   raises a code is the only place that knows what it means to a user, and a
   single map becomes a merge-conflict magnet as soon as two features grow at
@@ -589,10 +607,12 @@ is always entered through its `index.ts`.
 | | Catches | When |
 |---|---|---|
 | ESLint (`eslint.fsd.mjs`) | This import points the wrong way, or reaches past a slice's `index.ts` | As you type, per file, in the editor |
-| steiger (`steiger.config.ts`) | A slice with no references, a layer sliced too finely, a segment named after its type | On demand, whole tree |
+| steiger (`steiger.config.ts`) | A slice with no public API, a slice with no segments, a layer sliced too finely, a segment named after its type | On demand, whole tree |
 
-A bad import is visible in one file, so that check belongs where it is
-instant. Nothing in one file can show that a slice has no consumers.
+They do not overlap. `@feature-sliced/steiger-plugin` 0.7 dropped its import
+rules, so ESLint is the only thing checking the boundary — and a bad import is
+visible in one file, which is where that check belongs. Nothing in one file
+can show that a slice has no segments or that a layer has thirty of them.
 
 `eslint.fsd.mjs` adds no dependency: the boundary is expressed with the core
 `no-restricted-imports` rule, and the layer order is the whole of it. One trap
@@ -600,18 +620,23 @@ if you edit it — flat config **replaces** a rule's options when a later block
 matches the same file rather than merging them, so all of a layer's patterns
 have to stay in that layer's single block.
 
-steiger's `insignificant-slice` is configured as a **warning**. At its default
-severity it fails `lint` on the structure FSD's own guidance recommends
-starting from — a slice extracted for its first consumer — and a fresh slice
-failing CI teaches people to delete the rule rather than the slice. Read the
-message anyway: a slice that stays at one consumer for good probably belongs
-inside it.
+"Add a layer when a second consumer appears" is **not** enforced by either
+linter. `fsd/insignificant-slice` used to report a slice with a single
+reference, but the 0.7 plugin dropped it, so the one-consumer question is a
+review question: a slice that never gains a second consumer belongs inside the
+first.
 
 ## Generated copy and locale
 
 `init` asks whether the user-facing strings should be Thai or English
 (`--locale th|en`, Thai by default). It only decides what the first draft reads
 like — the catalogs are meant to be edited.
+
+There is no runtime i18n here, and adding one needs nothing from this CLI: a
+catalog is a plain `Record<code, string>`, so a project with a translator
+builds it where it is rendered — `catalogs={[{ CONFLICT: t("conflict") }]}` —
+and the codes stay the keys, because they are the API's contract rather than
+copy.
 
 For a Thai project, `generate page` also asks for the page title, because the
 Title Case of a kebab-case name is the right answer in English and the wrong
