@@ -165,6 +165,18 @@ refuses rather than re-writing, and points at `generate` and `add`.
 - spreads the generated ESLint rules into `eslint.config.mjs` and appends
   `steiger ./src` to the `lint` script
 
+`init` is the one command that runs on work you already have, so it writes
+what is missing and leaves what is there, naming each file it left alone.
+A `steiger.config.ts`, a `docs/fsd.md` or a `components.json` you wrote is
+yours; it is not a reason to refuse the rest.
+
+One case is a decision rather than a skip: **if your ESLint config already
+contains `no-restricted-imports`, the FSD boundary rules are not added at
+all** — not the file, not the spread. Flat config *replaces* a rule's options
+when a later block matches the same file instead of merging them, so two sets
+of import rules do not add up; the last block to match wins, in silence.
+Compare the boundary in `docs/fsd.md` with the rules you have and keep one.
+
 ### What init writes
 
 ~~~text

@@ -523,6 +523,37 @@ check("a 401 from anywhere resets the session entry rather than removing it", ()
   assert.doesNotMatch(queryClient, /^import .*shared\/auth/m);
 });
 
+// ------------------------------------------------------------- brownfield
+
+console.log("\ninit over a project that already has rules of its own");
+const d = fixture(path.join(root, "d"));
+fs.writeFileSync(path.join(d, "steiger.config.ts"), "export default [];\n");
+fs.mkdirSync(path.join(d, "docs"), { recursive: true });
+fs.writeFileSync(path.join(d, "docs", "fsd.md"), "# ours\n");
+fs.writeFileSync(
+  path.join(d, "eslint.config.mjs"),
+  'import { defineConfig } from "eslint/config";\n\n' +
+    'const eslintConfig = defineConfig([{ rules: { "no-restricted-imports": ["error", { patterns: [] }] } }]);\n\n' +
+    "export default eslintConfig;\n"
+);
+const brownfield = cli(d, ["init", "--no-install", "--defaults"]);
+check("init writes what is missing instead of refusing over what is there", () => {
+  // It used to throw on the first collision and write nothing at all, which is
+  // the worst answer for the one command that runs on somebody else's work.
+  assert.equal(read(d, "steiger.config.ts"), "export default [];\n");
+  assert.equal(read(d, "docs/fsd.md"), "# ours\n");
+  assertFiles(d, ["nextjs-fsd.config.json", "src/_app/styles/globals.css", "components.json"]);
+  assert.match(brownfield, /left alone: steiger\.config\.ts/);
+  assert.match(brownfield, /left alone: docs\/fsd\.md/);
+});
+check("a project with its own import rules does not get a second set", () => {
+  // Flat config replaces a rule's options when a later block matches the same
+  // file, so two sets do not add up — the last one to match wins, silently.
+  assert.ok(!has(d, "eslint.fsd.mjs"));
+  assert.doesNotMatch(read(d, "eslint.config.mjs"), /fsdBoundary/);
+  assert.match(brownfield, /left alone: eslint\.fsd\.mjs/);
+});
+
 // ------------------------------------------------------- typecheck the output
 
 console.log("\ntypecheck");
