@@ -23,14 +23,22 @@ export function makeQueryClient(): QueryClient {
    * device, expired, or logged out everywhere. The session is over no matter
    * which request happened to find out.
    *
-   * Dropping the cached session makes useSession refetch, 401 again, and
+   * Resetting the cached session makes useSession refetch, 401 again, and
    * useRequireSession redirect. Without it the session query sits fresh for
    * its whole staleTime while every other request 401s: a page that looks
    * signed in and does nothing, until a window focus eventually refetches it.
+   *
+   * resetQueries, not removeQueries, and the difference is the whole bug:
+   * removing an entry does not notify the observers mounted on it, so a
+   * component that was not re-rendering for its own reasons — a sidebar, a
+   * route guard — goes on rendering the session it had already read. The
+   * page draws a 401 inline under chrome that still shows the user's name,
+   * and nothing ever sees isError to redirect on. A reset notifies,
+   * refetches, and lands in error.
    */
   const endSessionOn401 = (error: unknown) => {
     if (error instanceof ApiError && error.status === 401) {
-      client.removeQueries({ queryKey: sessionKey });
+      void client.resetQueries({ queryKey: sessionKey });
     }
   };
 

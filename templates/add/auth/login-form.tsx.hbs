@@ -1,27 +1,44 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { type FormEvent } from "react";
+import { useCallback, useEffect, type FormEvent } from "react";
 
-import { authErrorCatalogs, safeNext, useLogin } from "{{alias}}/shared/auth";
+import { authErrorCatalogs, safeNext, useLogin, useSession } from "{{alias}}/shared/auth";
 import { FormError } from "{{alias}}/shared/ui";
 
 const field = "rounded-md border border-black/15 px-3 py-2 text-sm dark:border-white/20";
 
 export function LoginForm() {
   const login = useLogin();
+  const session = useSession();
   const router = useRouter();
+
+  // useRequireSession sends people here with ?next=, so pick that back up
+  // rather than always landing on the home page. Read from the URL when it is
+  // needed, not with useSearchParams(), which would drag a Suspense boundary
+  // onto a page that is otherwise static; safeNext is what keeps it same-site.
+  const signedIn = useCallback(
+    () => router.replace(safeNext(new URLSearchParams(window.location.search).get("next"))),
+    [router],
+  );
+
+  // Already signed in: someone typed /login, followed an old link, or came
+  // back to a tab that still had it open. Same destination as a fresh sign-in,
+  // so a ?next= they arrived with is still honoured.
+  //
+  // The form is drawn while the session is still loading rather than held
+  // behind a spinner — anonymous is the common case on this page, and it is
+  // the one that would pay for the wait.
+  useEffect(() => {
+    if (session.isSuccess) signedIn();
+  }, [session.isSuccess, signedIn]);
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     login.mutate(
       { email: String(form.get("email") ?? ""), password: String(form.get("password") ?? "") },
-      // useRequireSession sends people here with ?next=, so pick that back up
-      // rather than always landing on the home page. Read at submit time, not
-      // with useSearchParams(), which would drag a Suspense boundary onto a
-      // page that is otherwise static; safeNext is what keeps it same-site.
-      { onSuccess: () => router.replace(safeNext(new URLSearchParams(window.location.search).get("next"))) },
+      { onSuccess: signedIn },
     );
   }
 

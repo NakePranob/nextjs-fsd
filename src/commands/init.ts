@@ -11,6 +11,7 @@ import {
   addDependencies,
   appendScript,
   detectAppDir,
+  eslintRestrictsImports,
   detectPackageManager,
   findRepoRoot,
   installDependencies,
@@ -66,6 +67,23 @@ export async function initProject(projectDir: string, opts: InitOptions): Promis
   const stylesheet = `${appDir}/globals.css`;
   const movesStylesheet = fs.existsSync(path.join(projectDir, stylesheet));
 
+  // Files this would write that the project already has, and why they were
+  // left that way. `init` is the one command that runs on somebody else's
+  // work — refusing the batch over a steiger.config.ts they wrote last week
+  // (which is what it used to do) leaves them with nothing rather than with
+  // the parts they were missing.
+  const left: string[] = [];
+  const absent = (file: string, why: string): boolean => {
+    if (!fs.existsSync(path.join(projectDir, file))) return true;
+    left.push(`${file} ${pc.dim(`— ${why}`)}`);
+    return false;
+  };
+  // Asked before anything is written, so the summary below can say it.
+  const ownsImportRules = eslintRestrictsImports(projectDir);
+  if (ownsImportRules) {
+    left.push(`eslint.fsd.mjs ${pc.dim("— your eslint config already restricts imports")}`);
+  }
+
   if (!(opts.yes || opts.defaults)) {
     console.log(pc.bold("\nThis will:"));
     for (const line of [
@@ -74,7 +92,9 @@ export async function initProject(projectDir: string, opts: InitOptions): Promis
         ? `move ${pc.cyan(stylesheet)} to ${pc.cyan(`${srcDir}/_app/styles/globals.css`)} and repoint the import in ${appDir}/layout.tsx`
         : `create ${pc.cyan(`${srcDir}/_app/styles/globals.css`)}`,
       `point the ${pc.cyan(`${alias}/*`)} tsconfig alias at ./${srcDir}/*`,
-      `add ${pc.cyan("eslint.fsd.mjs")} — the import boundary as ESLint rules, so a wrong-way import is flagged in your editor (no new dependencies)`,
+      ownsImportRules
+        ? pc.yellow("leave your ESLint config alone — it already restricts imports, so the FSD boundary rules are not added")
+        : `add ${pc.cyan("eslint.fsd.mjs")} — the import boundary as ESLint rules, so a wrong-way import is flagged in your editor (no new dependencies)`,
       `add steiger + the FSD plugin and a steiger.config.ts for the whole-tree checks ESLint cannot make, then chain both into the lint script`,
       `add ${pc.cyan("components.json")} so \`shadcn add\` writes into ${srcDir}/shared/ui instead of ./components/ui`,
       `write ${pc.cyan("docs/fsd.md")}, a ${pc.cyan(".agents/skills/nextjs-fsd")} skill at the repository root (symlinked from ${pc.cyan(".claude/skills/")}), and point AGENTS.md at both`,
@@ -109,9 +129,17 @@ export async function initProject(projectDir: string, opts: InitOptions): Promis
   };
 
   const written = await applyTemplates(projectDir, [
-    { template: "init/steiger.config.ts.hbs", output: "steiger.config.ts" },
-    { template: "init/eslint.fsd.mjs.hbs", output: "eslint.fsd.mjs" },
-    { template: "init/fsd.md.hbs", output: "docs/fsd.md" },
+    {
+      template: "init/steiger.config.ts.hbs",
+      output: "steiger.config.ts",
+      when: () => absent("steiger.config.ts", "already there"),
+    },
+    {
+      template: "init/eslint.fsd.mjs.hbs",
+      output: "eslint.fsd.mjs",
+      when: () => !ownsImportRules && absent("eslint.fsd.mjs", "already there"),
+    },
+    { template: "init/fsd.md.hbs", output: "docs/fsd.md", when: () => absent("docs/fsd.md", "already there") },
     {
       template: "init/globals.css.hbs",
       output: `${srcDir}/_app/styles/globals.css`,
@@ -125,7 +153,7 @@ export async function initProject(projectDir: string, opts: InitOptions): Promis
     {
       template: "init/components.json.hbs",
       output: "components.json",
-      when: () => !fs.existsSync(path.join(projectDir, "components.json")),
+      when: () => absent("components.json", "your shadcn aliases, not ours"),
     },
   ], context);
 
@@ -148,7 +176,9 @@ export async function initProject(projectDir: string, opts: InitOptions): Promis
 
   if (patchTsconfigPaths(projectDir, alias, srcDir)) written.push(`tsconfig.json (${alias}/* alias)`);
 
-  const eslintPatch = patchEslintConfig(projectDir);
+  // "already" rather than "missing": nothing is wrong, there is simply no
+  // boundary file of ours to spread in.
+  const eslintPatch = ownsImportRules ? "already" : patchEslintConfig(projectDir);
   if (eslintPatch === "patched") written.push("eslint.config.mjs (spreads the FSD boundary rules)");
   if (appendScript(projectDir, "lint", `steiger ./${srcDir}`)) written.push("package.json (lint script)");
   written.push(...writeAgentDocs(projectDir, context));
@@ -181,6 +211,18 @@ export async function initProject(projectDir: string, opts: InitOptions): Promis
   written.push("nextjs-fsd.config.json");
 
   report(written, added);
+  if (left.length > 0) {
+    console.log();
+    for (const file of left) console.log(`  ${pc.dim("·")} left alone: ${file}`);
+  }
+  if (ownsImportRules) {
+    console.log(
+      pc.dim(
+        "\nThe import boundary is documented in docs/fsd.md — compare it with the rules you have, " +
+          "rather than running two sets that disagree."
+      )
+    );
+  }
 
   if (added.length > 0 && opts.install !== false) {
     installDependencies(projectDir, packageManager);

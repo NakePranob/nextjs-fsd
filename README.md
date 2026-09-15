@@ -165,6 +165,18 @@ refuses rather than re-writing, and points at `generate` and `add`.
 - spreads the generated ESLint rules into `eslint.config.mjs` and appends
   `steiger ./src` to the `lint` script
 
+`init` is the one command that runs on work you already have, so it writes
+what is missing and leaves what is there, naming each file it left alone.
+A `steiger.config.ts`, a `docs/fsd.md` or a `components.json` you wrote is
+yours; it is not a reason to refuse the rest.
+
+One case is a decision rather than a skip: **if your ESLint config already
+contains `no-restricted-imports`, the FSD boundary rules are not added at
+all** — not the file, not the spread. Flat config *replaces* a rule's options
+when a later block matches the same file instead of merging them, so two sets
+of import rules do not add up; the last block to match wins, in silence.
+Compare the boundary in `docs/fsd.md` with the rules you have and keep one.
+
 ### What init writes
 
 ~~~text
@@ -205,6 +217,7 @@ at the tree rather than assumed false.
 nextjs-fsd generate page settings
 nextjs-fsd generate page dashboard --auth
 nextjs-fsd generate page dashboard --route "(admin)/dashboard" --errors
+nextjs-fsd generate page dealers --client --model
 nextjs-fsd generate page loans --route "loans/[id]" --client
 nextjs-fsd g p settings --defaults
 ~~~
@@ -218,6 +231,7 @@ nextjs-fsd g p settings --defaults
 | --no-route | Write the slice only, no route file |
 | --client | Also create a `"use client"` leaf component |
 | --auth | The client leaf sits behind `useRequireSession` (needs `add auth`) |
+| --model | Add this page's TanStack Query hooks (needs `add error-handling`) |
 | --errors | Add this page's own error catalog (needs `add error-handling`) |
 | --defaults | Skip every question: server component only, route = the page name |
 
@@ -232,6 +246,7 @@ contribute nothing to the URL, so `--route "(admin)/dashboard"` serves
 src/_pages/dashboard/index.ts                     # public API — the only thing app/ imports
 src/_pages/dashboard/ui/dashboard-page.tsx        # server component + `metadata`
 src/_pages/dashboard/ui/dashboard-content.tsx     # --client / --auth: the "use client" leaf
+src/_pages/dashboard/model/dashboard.ts           # --model: query key, hooks, the record type
 src/_pages/dashboard/model/dashboard-errors.ts    # --errors: this page's error catalog
 app/(admin)/dashboard/page.tsx                    # re-exports the page and its metadata
 ~~~
@@ -242,6 +257,12 @@ anywhere.
 
 `"use client"` goes on the leaf, never on the page: a page component that
 needs the browser ships its whole tree to it.
+
+`--model` writes the same file a slice's `api` segment gets — a query key, a
+record type, a list query and a mutation that invalidates the key — into
+`model/`, because a page keeps what it knows about its own data in one
+segment. It stays internal to the slice: the page's `index.ts` exports the
+page, not its hooks.
 
 ## generate slice [layer] [name] — add a features/entities slice
 
@@ -302,6 +323,7 @@ is a type nothing can annotate against without breaking the import boundary.
 ~~~bash
 nextjs-fsd generate layout admin                  # applies at app/(admin)/
 nextjs-fsd generate layout auth --route "(auth)"
+nextjs-fsd generate layout admin --guard           # every route under it needs a session
 nextjs-fsd generate layout admin --route reports   # reuse it at another path
 nextjs-fsd g l admin --defaults
 ~~~
@@ -312,15 +334,24 @@ nextjs-fsd g l admin --defaults
 |---|---|
 | --route \<path\> | Where it applies; defaults to the route group `(<name>)` |
 | --no-route | Write the component only, no `layout.tsx` |
-| --defaults | Skip every question: route = the `(<name>)` group |
+| --guard | Every route under it sits behind the session, in one component (needs `add auth`) |
+| --defaults | Skip every question: route = the `(<name>)` group, no guard |
 
 ### What it generates
 
 ~~~text
 src/_app/layouts/admin-layout.tsx   # the shell component
+src/_app/layouts/admin-guard.tsx    # --guard only: the one useRequireSession caller
 src/_app/layouts/index.ts           # public API of the layouts segment
 app/(admin)/layout.tsx              # re-exports it as default
 ~~~
+
+A guard belongs to the shell, not to each page under it. One page checking for
+itself is fine; the second one is a race, because two components redirecting
+on the same failed session fight over the same navigation. With `--guard` the
+pages below call `useSession()` and trust what it says — so do not also
+generate them with `generate page --auth`, which the CLI warns about when it
+finds a guarded layout.
 
 Layouts live in `_app`, not `_pages`: a layout is not one route's content, it
 is what several routes have in common, and cross-page composition is the app
@@ -445,11 +476,19 @@ script on a bun project.
   signed in on that browser.
 - **A 401 that survives the refresh ends the session, whichever request found
   it.** The refresh cookie is gone by then — revoked, expired, or logged out
-  everywhere — so the QueryClient drops `sessionKey` and `useRequireSession`
-  redirects. Without it the session query stays fresh for its whole
-  `staleTime` while every other request 401s: a page that looks signed in and
-  does nothing. Mutations count too; the save that will never submit is the
-  one that matters.
+  everywhere — so the QueryClient **resets** `sessionKey` and
+  `useRequireSession` redirects. Without it the session query stays fresh for
+  its whole `staleTime` while every other request 401s: a page that looks
+  signed in and does nothing. Mutations count too; the save that will never
+  submit is the one that matters. `resetQueries`, not `removeQueries`:
+  removing an entry does not notify the observers mounted on it, so a sidebar
+  or a guard that was not re-rendering anyway keeps drawing the session it had
+  already read, and nothing ever sees `isError`.
+- **Signing out leaves the page, from one place.** `useLogout` redirects to
+  `/login` inside the function that ends the session, not from each button's
+  `onSettled` — for the same reason: clearing the cache does not re-render a
+  component that is not otherwise re-rendering, and a call site that forgets
+  the line looks signed in until something else happens to refetch.
 - **Copy lives in a per-domain catalog, never one global map.** The domain that
   raises a code is the only place that knows what it means to a user, and a
   single map becomes a merge-conflict magnet as soon as two features grow at
@@ -612,6 +651,12 @@ inside it.
 `init` asks whether the user-facing strings should be Thai or English
 (`--locale th|en`, Thai by default). It only decides what the first draft reads
 like — the catalogs are meant to be edited.
+
+There is no runtime i18n here, and adding one needs nothing from this CLI: a
+catalog is a plain `Record<code, string>`, so a project with a translator
+builds it where it is rendered — `catalogs={[{ CONFLICT: t("conflict") }]}` —
+and the codes stay the keys, because they are the API's contract rather than
+copy.
 
 For a Thai project, `generate page` also asks for the page title, because the
 Title Case of a kebab-case name is the right answer in English and the wrong

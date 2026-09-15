@@ -9,6 +9,11 @@ export function {{pascal}}Content() {
   // UX only. The API's own auth middleware is the real gate and it runs on
   // every request no matter what the browser rendered, so never treat a
   // rendered page as proof of a session.
+  //
+  // One caller per shell: if this page routes under a layout that already
+  // guards its routes (`generate layout <name> --guard`), drop this and call
+  // `useSession()` instead — two components redirecting on the same failed
+  // session race each other.
   const session = useRequireSession();
   if (session.isPending || session.isError) return <p className="text-sm">{{copy.loading}}</p>;
 

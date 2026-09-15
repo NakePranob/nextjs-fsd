@@ -365,6 +365,22 @@ const ESLINT_CONFIG_FILES = ["eslint.config.mjs", "eslint.config.js", "eslint.co
  * this needs, and a config someone has restructured falls through to printed
  * instructions instead of a wrong edit.
  */
+/**
+ * Whether the project's own flat config already restricts imports.
+ *
+ * `init` runs on projects that are not empty. One that has written its own
+ * `no-restricted-imports` block has an import boundary already — a second one
+ * spread in from `eslint.fsd.mjs` is either a duplicate or a disagreement, and
+ * flat config resolves a disagreement by silently keeping the last block that
+ * matched the file. Leaving it alone is the only answer that cannot be wrong.
+ */
+export function eslintRestrictsImports(projectDir: string): boolean {
+  const file = ESLINT_CONFIG_FILES.map((name) => path.join(projectDir, name)).find((candidate) =>
+    fs.existsSync(candidate)
+  );
+  return file !== undefined && fs.readFileSync(file, "utf8").includes("no-restricted-imports");
+}
+
 export function patchEslintConfig(projectDir: string): "patched" | "already" | "manual" | "missing" {
   const file = ESLINT_CONFIG_FILES.map((name) => path.join(projectDir, name)).find((candidate) =>
     fs.existsSync(candidate)

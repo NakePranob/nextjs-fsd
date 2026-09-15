@@ -1,0 +1,30 @@
+"use client";
+
+import type { ReactNode } from "react";
+
+import { useRequireSession } from "{{alias}}/shared/auth";
+
+/**
+ * The only place the {{name}} shell asks who is calling.
+ *
+ * Every route under this layout renders inside it, so the pages below can call
+ * `useSession()` and trust what it says. Keep it the **only** caller of
+ * `useRequireSession` here: two components redirecting on the same failed
+ * session race each other.
+ *
+ * UX only — the API's own auth middleware is the real gate and it runs on
+ * every request no matter what the browser rendered.
+ */
+export function {{pascal}}Guard({ children }: { children: ReactNode }) {
+  const session = useRequireSession();
+
+  // The redirect to /login is already in flight; anything drawn here is a
+  // flash on the way out.
+  if (session.isError) return null;
+
+  // Children render while the session is still loading rather than being
+  // replaced by a line of text: every page's own skeleton is a better loading
+  // state than this one, and blocking here holds each page's queries behind
+  // /users/me instead of letting them go out alongside it.
+  return <>{children}</>;
+}

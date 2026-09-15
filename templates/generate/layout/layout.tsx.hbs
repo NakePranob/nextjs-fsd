@@ -1,4 +1,8 @@
 import type { ReactNode } from "react";
+{{#if guard}}
+
+import { {{pascal}}Guard } from "./{{name}}-guard";
+{{/if}}
 
 /**
  * Shell for the {{name}} routes.
@@ -14,7 +18,13 @@ import type { ReactNode } from "react";
 export function {{pascal}}Layout({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-svh flex-col">
+{{#if guard}}
+      <main className="flex-1 p-6">
+        <{{pascal}}Guard>{children}</{{pascal}}Guard>
+      </main>
+{{else}}
       <main className="flex-1 p-6">{children}</main>
+{{/if}}
     </div>
   );
 }

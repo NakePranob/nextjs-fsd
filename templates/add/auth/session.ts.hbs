@@ -1,6 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient, type QueryClient, type UseQueryResult } from "@tanstack/react-query";
+import { useRouter } from "next/navigation";
 
 import { ApiError, api, sessionKey } from "{{alias}}/shared/api";
 
@@ -31,13 +32,21 @@ export { sessionKey };
  * meaning this hook doubles as the session bootstrap. `retry: false` because
  * that recovery already happened one layer down: a 401 that reaches here means
  * the cookie is gone too, and asking again will not help.
+ *
+ * One minute of staleness, not five. This entry is what the app believes about
+ * who is signed in, so its staleTime is how long a session that ended
+ * elsewhere — another device, an account an admin closed, an expired refresh —
+ * can keep the shell looking normal when nothing else happens to ask. The API
+ * refuses every request in the meantime regardless; this is only about how
+ * long the screen lies about it. A minute costs one small request per window
+ * focus.
  */
 export function useSession(): UseQueryResult<Session, ApiError> {
   return useQuery<Session, ApiError>({
     queryKey: sessionKey,
     queryFn: () => api.get<Session>("/users/me").then((response) => response.data),
     retry: false,
-    staleTime: 5 * 60_000,
+    staleTime: 60_000,
   });
 }
 
@@ -57,12 +66,13 @@ export function useLogin() {
 
 export function useLogout() {
   const queryClient = useQueryClient();
+  const router = useRouter();
   return useMutation<void, ApiError, void>({
     // Server-side too, not just locally: /auth/logout revokes the refresh
     // token and clears the cookie, otherwise the next reload silently signs
     // the user back in.
     mutationFn: () => api.post("/auth/logout").then(() => undefined),
-    onSettled: () => endSessionLocally(queryClient),
+    onSettled: () => endSession(queryClient, router),
   });
 }
 
@@ -70,8 +80,15 @@ export function useLogout() {
  * Ends the session on this device even when the server call failed — the user
  * asked to leave. `clear()`, not `remove(sessionKey)`: every other cached
  * query holds the previous user's data.
+ *
+ * The redirect belongs here rather than in each button's `onSettled`: clearing
+ * the cache does not re-render a component that is not otherwise re-rendering,
+ * so a sidebar or a route guard keeps the session it had already read, and
+ * nothing ever sees `isError` to redirect on. Every caller of this means
+ * "leave", so leaving is its job and no call site can forget the line.
  */
-function endSessionLocally(queryClient: QueryClient): void {
+function endSession(queryClient: QueryClient, router: ReturnType<typeof useRouter>): void {
   setAccessToken(null);
   queryClient.clear();
+  router.replace("/login");
 }

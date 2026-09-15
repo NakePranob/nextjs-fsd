@@ -146,6 +146,19 @@ Breaking one of these is silent — the build passes and the app is wrong.
   failed. A backend message is written for a log.
 - **One catalog per domain, never one global map.** `generate ... --errors`
   creates it in the right place.
+- **A failure the user must fix stays inline, one they only need to know goes
+  to a toast.** `<FormError>` is the inline half; a toast helper takes a
+  finished sentence, and resolving a code stays with the domain that raises it.
+- **A second consumer that shares *data* usually means `shared/<domain>/`, not
+  a new `entities/` slice.** Read docs/fsd.md before creating a layer.{{#if (eq locale "th")}}
+- **Thai copy: no negative tracking, nothing Thai inside `font-mono`, and line
+  heights loosened per text size.** Tone marks stack above and below, and a
+  mono face loaded with the latin subset has no Thai glyph to render.{{/if}}
+- **A catalog is a plain object, so i18n needs no second shape.** In a project
+  with a translator, build it where it is rendered — `catalogs={[{ CONFLICT:
+  t("conflict") }]}` — and keep the codes as the keys; they are the API's
+  contract, not copy. The CLI's `locale` only decides what the first draft
+  reads like.
 - **The access token stays in the module variable** in
   `{{srcDir}}/shared/auth/access-token.ts`. Never move it to `localStorage`, and
   never remove the single-flight guard in `shared/api/client.ts` — a backend

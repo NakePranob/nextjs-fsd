@@ -33,7 +33,7 @@ program
   .description(
     "Keep a Next.js App Router project on Feature-Sliced Design.\n\n" +
       "Next.js creates the app (`create-next-app`); this only shapes what is inside it: `init` once, " +
-      "then `generate` for slices and `add` for the API error handling and auth wiring.\n\n" +
+      "then `generate` for slices and `add` for the API error handling, auth wiring and formatting.\n\n" +
       "Run `nextjs-fsd` with no arguments to pick what to do from a menu. Commands ask for whatever you omit; " +
       "`--defaults` answers every question for CI."
   )
@@ -94,6 +94,7 @@ generate
   .option("--no-route", "write the slice only, no route file")
   .option("--client", 'also create a "use client" leaf component')
   .option("--auth", "the client leaf sits behind useRequireSession (needs `add auth`)")
+  .option("--model", "add model/<name>.ts, this page's TanStack Query hooks (needs `add error-handling`)")
   .option("--errors", "add model/<name>-errors.ts, this page's own error catalog (needs `add error-handling`)")
   .option("--defaults", "skip every question; server component only, route = the page name")
   .action(async (name, opts) => {
@@ -107,6 +108,7 @@ generate
         routeFile: noRoute ? false : undefined,
         client: opts.client,
         auth: opts.auth,
+        model: opts.model,
         errors: opts.errors,
         defaults: opts.defaults,
       });
@@ -140,13 +142,15 @@ generate
   .description("scaffold a shared route shell in _app/layouts plus the layout.tsx that re-exports it")
   .option("--route <path>", 'where it applies; defaults to the route group "(<name>)". A real segment works too: "admin"')
   .option("--no-route", "write the component only, no layout.tsx")
-  .option("--defaults", "skip every question; route = the (<name>) group")
+  .option("--guard", "every route under it sits behind the session, in one component (needs `add auth`)")
+  .option("--defaults", "skip every question; route = the (<name>) group, no guard")
   .action(async (name, opts) => {
     try {
       const noRoute = opts.route === false;
       await generateLayout(name, {
         route: noRoute ? undefined : opts.route,
         routeFile: noRoute ? false : undefined,
+        guard: opts.guard,
         defaults: opts.defaults,
       });
     } catch (err) {
@@ -185,7 +189,7 @@ async function runAddWizard(): Promise<void> {
 
 const add = program
   .command("add")
-  .description("add shared infrastructure; bare `add` opens an error-handling/auth wizard")
+  .description("add shared infrastructure; bare `add` opens an error-handling/auth/prettier wizard")
   .action(async () => {
     try {
       await runAddWizard();
@@ -289,7 +293,7 @@ async function runTopMenu(): Promise<void> {
     message: "What do you want to do?",
     choices: [
       { name: "Generate (a page or a features/entities slice)", value: "generate" },
-      { name: "Add (error handling / auth)", value: "add" },
+      { name: "Add (error handling / auth / prettier)", value: "add" },
       { name: "Show the project config", value: "config" },
     ],
   });
