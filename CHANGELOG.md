@@ -56,6 +56,31 @@ re-render a component that was not going to re-render anyway.
   `eslint.fsd.mjs` nor the spread: flat config replaces a rule's options
   rather than merging them, so two sets do not add up.
 
+- **`docs/fsd.md` no longer claims FSD discourages `widgets/`** — re-copy the
+  paragraph under "Add layers when a second consumer actually appears".
+
+  It does not. FSD v2.1 has `widgets` as an ordinary layer, and its only
+  caution is that a UI block which is most of a page's content and is never
+  reused should not be one. Closing the layer is a fine default for these
+  templates and stays the default; attributing it to the spec is what was
+  wrong, and it made the decision unarguable in every project that read the
+  generated doc as methodology. The paragraph now says whose call it is and
+  how to reverse it. Same wording removed from the `generate slice` layer
+  picker and the README.
+
+- **`docs/fsd.md` now says when "prefer `shared/<domain>/` over a new
+  `entities/` slice" stops applying** — re-copy that paragraph too, and the
+  matching bullet in the skill.
+
+  The advice was one-sided: it argued against creating the layer and gave no
+  signal for the day it is the right call, which is how a `shared/product`
+  stays put for months after it stopped being infrastructure. Two signals now
+  end it, and neither is a page count — a business rule landing in the
+  segment, or two `_pages` slices each keeping their own copy of one API
+  resource, which nothing can reconcile because they may not import each
+  other. `shared/product` is no longer given as an example of the honest
+  home; it was the case that outgrew it.
+
 ## 0.2.0 — released into the repository, not tagged
 
 Minor rather than patch: `add auth` writes `require-session.test.ts` on bun,

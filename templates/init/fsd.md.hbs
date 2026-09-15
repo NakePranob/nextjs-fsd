@@ -23,18 +23,43 @@ Next.js owns those names at the root.
 
 **Add layers when a second consumer actually appears, not up front.**
 Duplicating a component across two pages is cheaper to undo than an
-`entities/` layer built for a reuse that never happens. FSD v2.1 discourages
-`widgets/` — UI blocks carry user-flow logic, which makes the
-widget/feature boundary arbitrary — so reach for `features/` first.
+`entities/` layer built for a reuse that never happens.
+
+`widgets/` is left closed here, and that is **this project's** call rather than
+the spec's. FSD v2.1 has it as an ordinary layer; its only caution is that a UI
+block which is most of a page's content and is never reused should not be one.
+The reasoning for closing it: a reusable block with its own fetching and state
+is already a feature, so the widget/feature boundary would be one more decision
+per screen buying nothing. Reach for `features/` first. Reopen it by deleting
+this paragraph, not by asking the spec's permission.
 
 When the second consumer does appear and what it shares is *data* — the types
 and query hooks for one domain — `shared/<domain>/` is usually the honest
-home: `shared/auth`, `shared/product`, one file per capability. It bends
-"shared is infrastructure" a little, and it buys not paying for a layer whose
-whole promise is a third consumer that may never arrive. A `features/` slice
-is for a user *action* two pages perform, which is a different thing. The
-first project built this way passed seventeen pages without an `entities/`
-layer; do not treat creating one as the default step.
+home: `shared/auth`, one file per capability. It bends "shared is
+infrastructure" a little, and it buys not paying for a layer whose whole
+promise is a third consumer that may never arrive. A `features/` slice is for
+a user *action* two pages perform, which is a different thing. The first
+project built this way passed seventeen pages without an `entities/` layer; do
+not treat creating one as the default step.
+
+**Two signals say that advice has run out.** Neither is a page count — a
+`shared/` segment read by three pages can be perfectly correct.
+
+The first is a **business rule landing in the segment**. Types and query hooks
+are plumbing; a calculation, a format or a constraint that is *about* the
+business is not, and `shared/` is defined as the layer with no business
+meaning. When one shows up, the segment has become an entity and is only
+filed under `shared/`.
+
+The second is more expensive and quieter: **two `_pages` slices each writing
+their own copy** of the same API resource. They cannot import each other, so
+nothing makes the two agree — not review, not the compiler. Expect the type in
+one to be missing fields the other has, both to sit on the same cache key with
+one of them writing it as a bare string, and each to invalidate its own list
+and not the other's. That is not the cheap duplication this document argues
+for elsewhere; the cheap kind is one a compiler or a reader can see. Move it
+below both, and let the question of which lower layer be settled by the
+paragraph above.
 
 ## Import boundary
 
