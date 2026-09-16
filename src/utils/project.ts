@@ -1,6 +1,6 @@
 import path from "path";
 import fs from "fs-extra";
-import { execFileSync } from "child_process";
+import { execFileSync, execSync } from "child_process";
 import pc from "picocolors";
 import { PackageManager } from "../types";
 
@@ -195,10 +195,18 @@ export function addDependencies(
   return added;
 }
 
+// Through a shell, and not for convenience: on Windows npm, npx, pnpm and yarn
+// are `.cmd` shims, which execFile cannot start at all (ENOENT, or EINVAL since
+// Node 20.12). The command is built from constants, so there is nothing to
+// quote — and a string rather than an args array, because Node 24 warns
+// (DEP0190) about the array form with `shell: true`.
+function runShell(projectDir: string, command: string): void {
+  console.log(pc.dim(`> ${command}`));
+  execSync(command, { cwd: projectDir, stdio: "inherit" });
+}
+
 export function installDependencies(projectDir: string, manager: PackageManager): void {
-  const command = manager === "npm" ? ["npm", "install"] : [manager, "install"];
-  console.log(pc.dim(`> ${command.join(" ")}`));
-  execFileSync(command[0], command.slice(1), { cwd: projectDir, stdio: "inherit" });
+  runShell(projectDir, `${manager} install`);
 }
 
 export type HookResult =
@@ -271,8 +279,7 @@ function gitConfig(repoRoot: string, key: string): string | undefined {
 
 export function runCommand(projectDir: string, manager: PackageManager, args: string[]): void {
   const runner = manager === "npm" ? "npx" : manager === "yarn" ? "yarn" : manager === "pnpm" ? "pnpm" : "bunx";
-  console.log(pc.dim(`> ${runner} ${args.join(" ")}`));
-  execFileSync(runner, args, { cwd: projectDir, stdio: "inherit" });
+  runShell(projectDir, [runner, ...args].join(" "));
 }
 
 /**
@@ -340,7 +347,12 @@ export function appendExport(projectDir: string, barrel: string, line: string): 
     return true;
   }
   const current = fs.readFileSync(file, "utf8");
-  if (current.includes(line)) return false;
+  // Compared the way a formatter leaves it, not byte for byte: the line is
+  // written with double quotes, and a project whose prettier sets singleQuote
+  // rewrites it — or wraps it, with a trailing comma. An exact match misses both
+  // and appends the export a second time, which is a syntax error.
+  const shape = (text: string) => text.replace(/'/g, '"').replace(/[\s,;]/g, "");
+  if (shape(current).includes(shape(line))) return false;
   fs.writeFileSync(file, current.replace(/\n*$/, "\n") + `${line}\n`);
   return true;
 }
@@ -397,11 +409,8 @@ export function patchLayoutProviders(projectDir: string, appDir: string, alias: 
   const children = /\{\s*children\s*\}/.exec(source.slice(bodyAt));
   if (!children) return "manual";
 
-  const imports = [...source.matchAll(/^import .*$/gm)];
-  const lastImport = imports[imports.length - 1];
-  // index 0 is a real position: a layout whose first line is an import.
-  if (lastImport?.index === undefined) return "manual";
-  const importAt = source.indexOf("\n", lastImport.index) + 1;
+  const importAt = afterLastImport(source);
+  if (importAt === undefined) return "manual";
 
   // Children first, then the import: both edits are index-based, and the
   // import sits earlier in the file, so doing the later one first keeps the
@@ -417,6 +426,23 @@ export function patchLayoutProviders(projectDir: string, appDir: string, alias: 
   const importLine = `import { Providers } from "${alias}/_app/providers";\n`;
   fs.writeFileSync(file, withProvider.slice(0, importAt) + importLine + withProvider.slice(importAt));
   return "patched";
+}
+
+/**
+ * A whole import statement, from `import` to the closing quote of its
+ * specifier — across lines, because `[^;'"]` matches a newline. Anchoring on the
+ * first line alone is how an import list that prettier wrapped gets a new import
+ * spliced into the middle of its braces.
+ */
+const IMPORT_STATEMENT = /^[ \t]*import\b[^;'"]*['"][^'"\n]*['"][ \t]*;?[ \t]*$/gm;
+
+/** The offset just past the line that ends the last import, if there is one. */
+function afterLastImport(source: string): number | undefined {
+  const last = [...source.matchAll(IMPORT_STATEMENT)].pop();
+  // index 0 is a real position: a source whose first line is an import.
+  if (last?.index === undefined) return undefined;
+  const lineEnd = source.indexOf("\n", last.index + last[0].length);
+  return lineEnd === -1 ? undefined : lineEnd + 1;
 }
 
 const ESLINT_CONFIG_FILES = ["eslint.config.mjs", "eslint.config.js", "eslint.config.ts", "eslint.config.cjs"];
@@ -461,13 +487,11 @@ export function patchEslintConfig(projectDir: string): "patched" | "already" | "
   // `export default <identifier>;` is the shape every create-next-app config
   // has had. An inline array or call expression is left alone.
   const exported = /^export default (\w+);?[ \t]*$/m.exec(source);
-  const imports = [...source.matchAll(/^import .*$/gm)];
-  const lastImport = imports[imports.length - 1];
-  if (!exported || lastImport?.index === undefined) return "manual";
+  const importAt = afterLastImport(source);
+  if (!exported || importAt === undefined) return "manual";
 
   // The export sits after the imports, so replacing it first keeps the
   // import offset computed from the original source valid.
-  const importAt = source.indexOf("\n", lastImport.index) + 1;
   // A named const rather than `export default [...]`: eslint-config-next
   // warns on an anonymous default export, and init should not hand someone a
   // config file that lints with a warning.

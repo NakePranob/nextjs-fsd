@@ -9,6 +9,23 @@ Only versions with a `v*.*.*` tag are on npm. 0.2.0, 0.3.0 and 0.3.1 were
 released into the repository but never tagged, so `npm install @nakedev/nextjs-fsd`
 still resolves 0.1.1.
 
+## Unreleased
+
+### Fixed — nothing to re-copy; these are CLI-side
+
+- **`init` and `add error-handling` no longer splice an import into a wrapped
+  one.** The patchers for `app/layout.tsx` and the flat ESLint config put their
+  import after the *first line* of the last import, so a last import prettier
+  had wrapped over several lines came out as `import {` followed by our import
+  — a file that no longer parses, from a command that reported `patched`.
+- **Re-appending an export a formatter already rewrote no longer duplicates
+  it.** The barrel check compared text exactly, so a line rewritten to single
+  quotes or wrapped with a trailing comma was appended again — a duplicate
+  export is a syntax error.
+- **Installing dependencies works on Windows.** npm, npx, pnpm and yarn are
+  `.cmd` shims there, which `execFile` cannot start; any `init` or `add` without
+  `--no-install` threw after writing every file.
+
 ## 0.3.1 — in develop, not tagged
 
 A wording fix, found downstream: the generated docs were presenting one of
