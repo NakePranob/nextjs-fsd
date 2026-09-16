@@ -222,7 +222,7 @@ export async function generateSlice(
       choices: [
         { name: "features — a whole user action, reused by two or more pages", value: "features" },
         { name: "entities — a business object, reused by two or more features", value: "entities" },
-        { name: "widgets — a composite UI block (FSD v2.1 discourages this; prefer features)", value: "widgets" },
+        { name: "widgets — a composite UI block (prefer features; see docs/fsd.md)", value: "widgets" },
       ],
     })) as SliceLayer);
 
