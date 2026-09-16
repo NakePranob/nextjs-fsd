@@ -283,8 +283,12 @@ nextjs-fsd g s entities loan --defaults
 Layers are `features`, `entities` and `widgets`. `_pages` slices come from
 `generate page`; `_app` and `shared` are written by `init` and `add`.
 
-FSD v2.1 discourages `widgets/` — a UI block carries user-flow logic, which
-makes the widget/feature boundary arbitrary — so reach for `features/` first.
+`init` writes a `docs/fsd.md` that leaves `widgets/` closed and says so as a
+project choice. FSD v2.1 itself has it as an ordinary layer — the spec's only
+caution is that a UI block which is most of a page's content and is never
+reused should not be one. The generator takes `widgets` because the
+methodology has it; prefer `features/` unless you have decided otherwise, and
+record that decision in `docs/fsd.md`.
 
 ### Options
 

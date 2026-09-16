@@ -150,7 +150,10 @@ Breaking one of these is silent — the build passes and the app is wrong.
   to a toast.** `<FormError>` is the inline half; a toast helper takes a
   finished sentence, and resolving a code stays with the domain that raises it.
 - **A second consumer that shares *data* usually means `shared/<domain>/`, not
-  a new `entities/` slice.** Read docs/fsd.md before creating a layer.{{#if (eq locale "th")}}
+  a new `entities/` slice** — until a business rule lands in that segment, or
+  two `_pages` slices are each keeping their own copy of one API resource.
+  Those two are what `shared/` cannot hold; a page count is not. Read
+  docs/fsd.md before creating a layer.{{#if (eq locale "th")}}
 - **Thai copy: no negative tracking, nothing Thai inside `font-mono`, and line
   heights loosened per text size.** Tone marks stack above and below, and a
   mono face loaded with the latin subset has no Thai glyph to render.{{/if}}
