@@ -5,6 +5,7 @@ import path from "node:path";
 import { test } from "node:test";
 
 import {
+  appendExport,
   detectAppDir,
   findRepoRoot,
   patchEslintConfig,
@@ -58,6 +59,18 @@ test("second run is a no-op", () => {
   const once = fs.readFileSync(path.join(dir, "app", "layout.tsx"), "utf8");
   assert.equal(patchLayoutProviders(dir, "app", "@"), "already");
   assert.equal(fs.readFileSync(path.join(dir, "app", "layout.tsx"), "utf8"), once);
+});
+
+test("the Providers import goes after a wrapped import, not inside it", () => {
+  const dir = tempProject(
+    NEXT_LAYOUT.replace(
+      'import { Geist } from "next/font/google";\nimport "@/_app/styles/globals.css";',
+      'import "@/_app/styles/globals.css";\nimport {\n  Geist,\n  Geist_Mono,\n} from "next/font/google";'
+    )
+  );
+  assert.equal(patchLayoutProviders(dir, "app", "@"), "patched");
+  const patched = fs.readFileSync(path.join(dir, "app", "layout.tsx"), "utf8");
+  assert.match(patched, /\} from "next\/font\/google";\nimport \{ Providers \} from "@\/_app\/providers";\n/);
 });
 
 test("a layout with no body is reported, not mangled", () => {
@@ -136,6 +149,17 @@ test("spreads the FSD boundary into the flat config, without an anonymous defaul
   assert.doesNotMatch(patched, /export default \[/);
 
   assert.equal(patchEslintConfig(dir), "already");
+});
+
+test("the boundary import goes after a wrapped import, not inside it", () => {
+  const dir = tempProject();
+  fs.writeFileSync(
+    path.join(dir, "eslint.config.mjs"),
+    'import {\n  defineConfig,\n  globalIgnores,\n} from "eslint/config";\n\nconst eslintConfig = defineConfig([]);\n\nexport default eslintConfig;\n'
+  );
+  assert.equal(patchEslintConfig(dir), "patched");
+  const patched = fs.readFileSync(path.join(dir, "eslint.config.mjs"), "utf8");
+  assert.match(patched, /\} from "eslint\/config";\nimport fsdBoundary from "\.\/eslint\.fsd\.mjs";\n/);
 });
 
 test("a restructured eslint config is reported, not mangled", () => {
@@ -244,6 +268,19 @@ test("the skill goes to the repository root, not the workspace it was run in", (
 
   // Second run leaves the link alone rather than throwing on an existing path.
   assert.doesNotThrow(() => writeAgentSkill(workspace, "nextjs-fsd", "# skill\n"));
+});
+
+test("appendExport recognises a line a formatter has already rewritten", () => {
+  // Written with double quotes; a singleQuote prettier config rewrites it, and a
+  // long line comes back wrapped with a trailing comma. Appending it again would
+  // be a duplicate export — a syntax error.
+  const line = 'export { sessionKey, useLogin, type Session } from "./session";';
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "nextjs-fsd-barrel-"));
+  fs.writeFileSync(path.join(dir, "a.ts"), "export { sessionKey, useLogin, type Session } from './session';\n");
+  fs.writeFileSync(path.join(dir, "b.ts"), "export {\n  sessionKey,\n  useLogin,\n  type Session,\n} from './session';\n");
+  assert.equal(appendExport(dir, "a.ts", line), false);
+  assert.equal(appendExport(dir, "b.ts", line), false);
+  assert.equal(appendExport(dir, "a.ts", 'export { useLogout } from "./session";'), true, "a different export still goes in");
 });
 
 test("no repository above it falls back to the project directory", () => {
