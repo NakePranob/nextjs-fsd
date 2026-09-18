@@ -250,9 +250,25 @@ check("init writes the layer, linter, shadcn and agent files", () =>
     "components.json",
     "docs/fsd.md",
     ".agents/skills/nextjs-fsd/SKILL.md",
+    ".agents/skills/feature-sliced-design/SKILL.md",
     "AGENTS.md",
     "nextjs-fsd.config.json",
   ])
+);
+check("the FSD methodology skill ships with its references", () => {
+  assertFiles(a, [".agents/skills/feature-sliced-design/references/framework-integration.md"]);
+  assert.match(
+    read(a, ".agents/skills/feature-sliced-design/references/framework-integration.md"),
+    /## Next\.js/
+  );
+});
+check("the methodology skill is copied verbatim, never rendered", () =>
+  // Handlebars would read this Vue example as an expression and render it to
+  // nothing — a doc that silently loses the line it was demonstrating.
+  assert.match(
+    read(a, ".agents/skills/feature-sliced-design/references/cross-import-patterns.md"),
+    /{{ comment\.text }}/
+  )
 );
 check("the skill carries frontmatter and defers FSD theory to the FSD skill", () => {
   const skill = read(a, ".agents/skills/nextjs-fsd/SKILL.md");
@@ -873,6 +889,12 @@ check("no template variable survived into any generated file", () => {
           const body = fs.readFileSync(full, "utf8");
           // `{{` never legitimately appears in the output: JSX uses one brace,
           // and no generated file writes a handlebars expression on purpose.
+          // Only the methodology skill is exempt — it is copied byte-for-byte,
+          // Vue examples and all. `.claude/` holds the symlinked copy of both
+          // skills, so it is skipped too.
+          const relative = path.relative(dir, full).split(path.sep).join("/");
+          if (relative.includes("skills/feature-sliced-design/")) continue;
+          if (relative.startsWith(".claude/")) continue;
           if (body.includes("{{")) leaks.push(path.relative(dir, full));
         }
       }

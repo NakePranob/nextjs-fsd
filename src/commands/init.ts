@@ -6,7 +6,7 @@ import { ProjectConfig } from "../types";
 import { confirm, select } from "../prompts";
 import { CONFIG_SCHEMA_VERSION, detectFeatures, isProjectDir, writeConfig } from "../utils/config";
 import { Locale, copyFor } from "../utils/copy";
-import { applyTemplates, renderTemplate } from "../utils/render";
+import { applyTemplates, readTemplateTree, renderTemplate } from "../utils/render";
 import {
   addDependencies,
   appendScript,
@@ -20,6 +20,7 @@ import {
   patchLayoutStyleImport,
   patchTsconfigPaths,
   writeAgentSkill,
+  writeAgentSkillTree,
 } from "../utils/project";
 import { cliVersion } from "../utils/version";
 
@@ -100,7 +101,7 @@ export async function initProject(projectDir: string, opts: InitOptions): Promis
         : `add ${pc.cyan("eslint.fsd.mjs")} — the import boundary as ESLint rules, so a wrong-way import is flagged in your editor (no new dependencies)`,
       `add steiger + the FSD plugin and a steiger.config.ts for the whole-tree checks ESLint cannot make, then chain both into the lint script`,
       `add ${pc.cyan("components.json")} so \`shadcn add\` writes into ${srcDir}/shared/ui instead of ./components/ui`,
-      `write ${pc.cyan("docs/fsd.md")}, a ${pc.cyan(".agents/skills/nextjs-fsd")} skill at the repository root (symlinked from ${pc.cyan(".claude/skills/")}), and point AGENTS.md at both`,
+      `write ${pc.cyan("docs/fsd.md")}, a ${pc.cyan(".agents/skills/nextjs-fsd")} and a ${pc.cyan(".agents/skills/feature-sliced-design")} skill at the repository root (symlinked from ${pc.cyan(".claude/skills/")}), and point AGENTS.md at them`,
       opts.hooks === false
         ? pc.dim("write no git hook (--no-hooks)")
         : `write a ${pc.cyan("commit-msg")} hook that checks the subject is a Conventional Commit — shape only, your language and emoji rules stay yours — and point ${pc.cyan("core.hooksPath")} at it`,
@@ -290,6 +291,15 @@ function writeAgentDocs(projectDir: string, context: object, hook?: { status: st
   // skills — an agent's instinct on "add a settings screen" is to hand-write
   // the files, which is exactly what the two linters then report.
   const written = writeAgentSkill(projectDir, "nextjs-fsd", renderTemplate("init/skill.md.hbs", context));
+  // The methodology itself, shipped rather than linked: "should this be an
+  // entity" is the question that decides whether the generator is being used
+  // well, and an agent that cannot answer it generates a plausible wrong
+  // shape. Copied verbatim, never rendered — its Vue examples contain `{{ }}`
+  // that Handlebars would eat.
+  const methodology = writeAgentSkillTree(projectDir, "feature-sliced-design", readTemplateTree("init/fsd-skill"));
+  const count = methodology.files.length;
+  written.push(`.agents/skills/feature-sliced-design/ ${pc.dim(`(${count} files)`)}`);
+  if (methodology.note) written.push(methodology.note);
   const section = renderTemplate("init/agents-section.md.hbs", context);
   const agents = path.join(projectDir, "AGENTS.md");
 

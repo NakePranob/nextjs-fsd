@@ -20,6 +20,12 @@ the repository root, symlinked from `.claude/skills/nextjs-fsd`, which carries
 the same contract in the form they read first. `docs/fsd.md` is the source of
 truth if the two disagree.
 
+Two agent skills sit in the repository root, both symlinked from `.claude/skills/`:
+
+- `.agents/skills/nextjs-fsd/` — driving the generator in this repo
+- `.agents/skills/feature-sliced-design/` — the FSD methodology itself, for the
+  "should this be an entity at all" questions
+
 Scaffold with `nextjs-fsd generate page|slice|layout|api-route` rather than by hand, so
 slices keep the same shape. Re-running one extends what exists (adds a
 segment, a leaf, an error catalog) and never rewrites a file you already have.

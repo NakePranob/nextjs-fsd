@@ -197,6 +197,7 @@ steiger.config.ts                      # the whole-tree FSD checks
 components.json                        # aims `shadcn add` at src/shared/ui
 docs/fsd.md                            # the convention, in full
 <repo>/.agents/skills/nextjs-fsd/      # the same contract, as a skill
+<repo>/.agents/skills/feature-sliced-design/  # the FSD methodology itself (v2.1)
 <repo>/.claude/skills/nextjs-fsd       # symlink to it, for Claude Code
 AGENTS.md                              # an FSD section appended, or created
 <repo>/.githooks/commit-msg            # subject must be a Conventional Commit

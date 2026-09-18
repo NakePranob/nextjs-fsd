@@ -135,6 +135,55 @@ function lstatOrNull(target: string): fs.Stats | null {
   }
 }
 
+/**
+ * Writes a multi-file agent skill where the agents actually look for it.
+ *
+ * Same placement as writeAgentSkill — real tree under `.agents/skills/`,
+ * symlinked from `.claude/skills/`, both at the repository root — but for a
+ * whole tree (SKILL.md plus references/) in one call. Returns what was
+ * written, plus a note when there is one, because the caller prints a file
+ * count for a vendored tree rather than eight added lines.
+ */
+export function writeAgentSkillTree(
+  projectDir: string,
+  name: string,
+  files: Record<string, string>
+): { files: string[]; note?: string } {
+  const root = findRepoRoot(projectDir);
+  const relative = (target: string) => toPosix(path.relative(projectDir, target)) || ".";
+
+  const dir = path.join(root, ".agents", "skills", name);
+  const written: string[] = [];
+  for (const [relativePath, contents] of Object.entries(files)) {
+    const file = path.join(dir, ...relativePath.split("/"));
+    fs.ensureDirSync(path.dirname(file));
+    fs.writeFileSync(file, contents);
+    written.push(relative(file));
+  }
+
+  const link = path.join(root, ".claude", "skills", name);
+  // lstat, not existsSync: a symlink left pointing at a deleted target is
+  // still a thing in the way, and existsSync follows it and says no.
+  if (lstatOrNull(link)) return { files: written };
+
+  fs.ensureDirSync(path.dirname(link));
+  try {
+    fs.symlinkSync(path.join("..", "..", ".agents", "skills", name), link, "dir");
+    return { files: written, note: `${relative(link)} -> .agents/skills/${name}` };
+  } catch {
+    // Windows refuses symlinks without developer mode or elevation. A second
+    // real copy still works for Claude Code — it just has to be rewritten by
+    // the next `init`, which is what the CLI does anyway.
+    for (const [relativePath, contents] of Object.entries(files)) {
+      const file = path.join(link, ...relativePath.split("/"));
+      fs.ensureDirSync(path.dirname(file));
+      fs.writeFileSync(file, contents);
+      written.push(relative(file));
+    }
+    return { files: written, note: `${relative(link)}/ ${pc.dim("(copied — this OS refused a symlink)")}` };
+  }
+}
+
 function toPosix(value: string): string {
   return value.split(path.sep).join("/");
 }
