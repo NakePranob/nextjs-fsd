@@ -231,8 +231,14 @@ nextjs-fsd generate page dashboard --auth
 nextjs-fsd generate page dashboard --route "(admin)/dashboard" --errors
 nextjs-fsd generate page dealers --client --api
 nextjs-fsd generate page loans --route "loans/[id]" --client
+nextjs-fsd generate page dealers loans --defaults   # several at once, each routed by its own name
 nextjs-fsd g p settings --defaults
 ~~~
+
+Names may include a slice group, such as `admin/dashboard`, and `--root` may
+choose another FSD root inside `src/` (for example `src/domain`). Multiple
+page names use their name as their route; pass `--route` only when generating
+one page.
 
 ### Options
 
@@ -241,6 +247,7 @@ nextjs-fsd g p settings --defaults
 | --title \<title\> | Heading and browser title; defaults to the Title Case of the name |
 | --route \<path\> | App Router path; defaults to the page name |
 | --no-route | Write the slice only, no route file |
+| -r, --root \<dir\> | FSD root inside `src/` (default `src`), e.g. `-r src/domain` |
 | --client | Also create a `"use client"` leaf component |
 | --auth | The client leaf sits behind `useRequireSession` (needs `add auth`) |
 | --api | Add this page's TanStack Query hooks under `api/` (needs `add error-handling`) |
@@ -289,8 +296,15 @@ hooks. The old `--model` flag remains as a compatibility alias for `--api`.
 ~~~bash
 nextjs-fsd generate slice features checkout --segments ui,model
 nextjs-fsd generate slice entities loan --segments ui,api,lib --errors
+nextjs-fsd generate slice entities user profile --segments ui
+nextjs-fsd generate slice features employee/employee-record --segments ui -r src/domain
 nextjs-fsd g s entities loan --defaults
 ~~~
+
+The command accepts multiple slice names, comma-separated or as separate
+arguments, and supports slice groups such as `employee/employee-record`.
+`-r` is the short form of `--root`; layer names take short forms too
+(`f`, `e`, `w`).
 
 Layers are `features`, `entities` and `widgets`. `_pages` slices come from
 `generate page`; `_app` and `shared` are written by `init` and `add`.
@@ -307,6 +321,7 @@ record that decision in `docs/fsd.md`.
 | Option | Effect |
 |---|---|
 | --segments \<list\> | Comma-separated: `ui,model,api,lib,config`; defaults to `ui` |
+| -r, --root \<dir\> | FSD root inside `src/` (default `src`), e.g. `-r src/domain` |
 | --errors | Add this slice's own error catalog (needs `add error-handling`) |
 | --defaults | Skip every question: the `ui` segment only |
 

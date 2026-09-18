@@ -20,7 +20,7 @@ the repository root, symlinked from `.claude/skills/nextjs-fsd`, which carries
 the same contract in the form they read first. `docs/fsd.md` is the source of
 truth if the two disagree.
 
-Scaffold with `nextjs-fsd generate page|slice|layout` rather than by hand, so
+Scaffold with `nextjs-fsd generate page|slice|layout|api-route` rather than by hand, so
 slices keep the same shape. Re-running one extends what exists (adds a
 segment, a leaf, an error catalog) and never rewrites a file you already have.
 `shadcn add <name>` is already aimed at `{{srcDir}}/shared/ui` by

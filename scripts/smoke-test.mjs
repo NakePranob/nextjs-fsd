@@ -440,6 +440,41 @@ check("a config segment carries the slice's flags and joins the public API", () 
     /export \{ loanApplicationConfig \} from "\.\/config\/loan-application";/
   );
 });
+
+cli(a, ["generate", "page", "alpha", "beta", "--defaults"]);
+check("several pages generate in one command, each routed by its own name", () =>
+  assertFiles(a, ["src/_pages/alpha/index.ts", "app/alpha/page.tsx", "src/_pages/beta/index.ts", "app/beta/page.tsx"])
+);
+check("--route with several pages is refused instead of guessing", () =>
+  assert.match(cliFails(a, ["generate", "page", "alpha", "beta", "--route", "x", "--defaults"]), /only one page/)
+);
+
+cli(a, ["generate", "slice", "f", "employee/employee-record", "--segments", "ui,config", "--defaults"]);
+check("a slice group nests under its group, files named for the slice", () => {
+  assertFiles(a, [
+    "src/features/employee/employee-record/index.ts",
+    "src/features/employee/employee-record/ui/employee-record.tsx",
+    "src/features/employee/employee-record/config/employee-record.ts",
+  ]);
+  assert.match(
+    read(a, "src/features/employee/employee-record/index.ts"),
+    /export \{ EmployeeRecord \} from "\.\/ui\/employee-record";/
+  );
+});
+
+cli(a, ["generate", "slice", "entities", "ledger-account", "-r", "src/domain", "--segments", "ui", "--defaults"]);
+cli(a, ["generate", "page", "vault", "--root", "src/domain", "--defaults"]);
+check("--root puts slices under another FSD root with matching imports", () => {
+  assertFiles(a, [
+    "src/domain/entities/ledger-account/index.ts",
+    "src/domain/_pages/vault/index.ts",
+    "app/vault/page.tsx",
+  ]);
+  assert.match(read(a, "app/vault/page.tsx"), /from "@\/domain\/_pages\/vault";/);
+});
+check("--root outside src/ is refused instead of writing unresolvable imports", () =>
+  assert.match(cliFails(a, ["generate", "slice", "entities", "x", "-r", "other", "--defaults"]), /must stay inside src/)
+);
 check("index.ts gains the new exports and keeps the old one", () => {
   const barrel = read(a, "src/features/loan-application/index.ts");
   assert.match(barrel, /export \{ LoanApplication \} from "\.\/ui\/loan-application";/);

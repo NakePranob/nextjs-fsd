@@ -42,10 +42,44 @@ export function resolveNaming(raw: string): Naming {
   const name = toKebabCase(raw);
   return {
     name,
+    directory: name,
     pascal: toPascalCase(name),
     camel: toCamelCase(name),
     screaming: name.replace(/-/g, "_").toUpperCase(),
   };
+}
+
+/**
+ * Validate a slice name that may include optional group folders, for example
+ * `employee/employee-record`. Groups are directories only; the final part is
+ * still the slice name used for generated files and identifiers.
+ */
+export function validateSlicePath(raw: string): string | true {
+  const value = raw.trim();
+  if (!value || value.includes("\\")) {
+    return `invalid slice path "${raw}" — use kebab-case parts separated by "/", e.g. "employee/employee-record"`;
+  }
+  const parts = value.split("/");
+  if (parts.some((part) => part === "")) {
+    return `invalid slice path "${raw}" — group and slice names cannot be empty`;
+  }
+  for (const part of parts) {
+    const check = validateSliceName(part);
+    if (check !== true) return check;
+  }
+  return true;
+}
+
+export function resolveSliceNaming(raw: string): Naming {
+  const check = validateSlicePath(raw);
+  if (check !== true) throw new Error(check);
+  const directory = raw
+    .trim()
+    .split("/")
+    .map((part) => toKebabCase(part))
+    .join("/");
+  const naming = resolveNaming(directory.split("/").at(-1)!);
+  return { ...naming, directory };
 }
 
 // App Router path for a page slice. Route groups stay verbatim — "(admin)"

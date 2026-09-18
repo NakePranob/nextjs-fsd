@@ -4,7 +4,7 @@ import pc from "picocolors";
 
 import { NO_TTY_MESSAGE, select } from "./prompts";
 import { initProject } from "./commands/init";
-import { generateApiRoute, generateLayout, generatePage, generateSlice } from "./commands/generate";
+import { generateApiRoute, generateLayout, generatePage, generatePages, generateSlice, generateSlices } from "./commands/generate";
 import { addAuth, addErrorHandling, addPrettier } from "./commands/add";
 import { setProjectLocale, showProjectConfig } from "./commands/config";
 import { isProjectDir, readConfig } from "./utils/config";
@@ -98,27 +98,29 @@ const generate = program
     }
   });
 generate
-  .command("page [name]")
+  .command("page [names...]")
   .alias("p")
-  .description("scaffold a _pages slice and the thin route file that re-exports it")
+  .description("scaffold _pages slices and the thin route files that re-export them")
   .option("--title <title>", "heading and browser title; defaults to the Title Case of the page name")
   .option("--route <path>", 'App Router path; defaults to the page name. Route groups and dynamic segments work: "(admin)/dashboard", "loans/[id]"')
   .option("--no-route", "write the slice only, no route file")
+  .option("-r, --root <dir>", "FSD root inside src/ (default src), e.g. -r src/domain")
   .option("--client", 'also create a "use client" leaf component')
   .option("--auth", "the client leaf sits behind useRequireSession (needs `add auth`)")
   .option("--api", "add api/<name>.ts, this page's TanStack Query hooks (needs `add error-handling`)")
   .option("--model", "legacy alias for --api")
   .option("--errors", "add model/<name>-errors.ts, this page's own error catalog (needs `add error-handling`)")
   .option("--defaults", "skip every question; server component only, route = the page name")
-  .action(async (name, opts) => {
+  .action(async (names, opts) => {
     try {
       // commander folds --no-route into the same `route` key: false when it
       // was passed, a string when --route was, undefined when neither.
       const noRoute = opts.route === false;
-      await generatePage(name, {
+      await generatePages(names, {
         title: opts.title,
         route: noRoute ? undefined : opts.route,
         routeFile: noRoute ? false : undefined,
+        root: opts.root,
         client: opts.client,
         auth: opts.auth,
         api: opts.api,
@@ -132,16 +134,18 @@ generate
   });
 
 generate
-  .command("slice [layer] [name]")
+  .command("slice [layer] [names...]")
   .alias("s")
-  .description("scaffold a features/entities/widgets slice with only the segments it needs")
+  .description("scaffold features/entities/widgets slices with only the segments they need")
   .option("--segments <list>", "comma-separated: ui,model,api,lib,config (default ui)")
+  .option("-r, --root <dir>", "FSD root inside src/ (default src), e.g. -r src/domain")
   .option("--errors", "add model/<name>-errors.ts, this slice's own error catalog (needs `add error-handling`)")
   .option("--defaults", "skip every question; ui segment only")
-  .action(async (layer, name, opts) => {
+  .action(async (layer, names, opts) => {
     try {
-      await generateSlice(layer, name, {
+      await generateSlices(layer, names, {
         segments: opts.segments,
+        root: opts.root,
         errors: opts.errors,
         defaults: opts.defaults,
       });

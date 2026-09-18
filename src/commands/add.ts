@@ -252,7 +252,7 @@ export async function addAuth(opts: AddOptions): Promise<void> {
     ],
     // The login form is a "use client" leaf, so the route re-exports from the
     // server-only entry — same split `generate page --auth` writes.
-    { ...context, name: "login", pascal: "Login", hasContent: true }
+    { ...context, name: "login", pascal: "Login", directory: "login", pageAlias: config.alias, hasContent: true }
   );
 
   // No index.ts template entry above: `add error-handling` may already have

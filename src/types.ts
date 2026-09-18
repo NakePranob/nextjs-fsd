@@ -40,6 +40,8 @@ export interface ProjectConfig {
 export interface Naming {
   /** kebab-case: directory and file name — "reset-password". */
   name: string;
+  /** Group path including the slice — "employee/employee-record", or just the name. */
+  directory: string;
   /** PascalCase: component/type identifier — "ResetPassword". */
   pascal: string;
   /** camelCase: hook/variable identifier — "resetPassword". */

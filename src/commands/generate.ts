@@ -6,7 +6,7 @@ import { SLICE_LAYERS, SEGMENTS, Segment, SliceLayer } from "../types";
 import { checkbox, confirm, input, select } from "../prompts";
 import { readConfig } from "../utils/config";
 import { copyFor } from "../utils/copy";
-import { normalizeRoute, resolveNaming, validateRoute, validateSliceName } from "../utils/naming";
+import { normalizeRoute, resolveNaming, resolveSliceNaming, validateRoute, validateSliceName, validateSlicePath } from "../utils/naming";
 import { applyTemplates, renderTemplate, TemplateEntry, formatFiles } from "../utils/render";
 import { appendExport } from "../utils/project";
 import { report } from "./init";
@@ -16,6 +16,8 @@ export interface PageOptions {
   route?: string;
   /** false when --no-route was passed; commander leaves it undefined otherwise. */
   routeFile?: boolean;
+  /** FSD root relative to the project, defaulting to the configured srcDir. */
+  root?: string;
   client?: boolean;
   auth?: boolean;
   api?: boolean;
@@ -28,14 +30,15 @@ export interface PageOptions {
 export async function generatePage(rawName: string | undefined, opts: PageOptions): Promise<void> {
   const config = readConfig(process.cwd());
   assertInputs("page", rawName, opts);
+  const root = resolveFsdRoot(config.srcDir, opts.root);
 
   const name =
     rawName ??
     (await input({
-      message: "Page name (kebab-case, becomes src/_pages/<name>/):",
-      validate: validateSliceName,
+      message: `Page name (kebab-case or group/name, becomes ${root}/_pages/<name>/):`,
+      validate: validateSlicePath,
     }));
-  const naming = resolveNaming(name);
+  const naming = resolveSliceNaming(name);
 
   let { client, auth, errors } = opts;
   // The canonical flag is --api; --model remains a legacy alias, but the
@@ -102,7 +105,7 @@ export async function generatePage(rawName: string | undefined, opts: PageOption
   const routeCheck = validateRoute(route);
   if (routeCheck !== true) throw new Error(routeCheck);
 
-  const slice = `${config.srcDir}/_pages/${naming.name}`;
+  const slice = `${root}/_pages/${naming.directory}`;
   // A page that already exists is being extended, not recreated — `--errors`
   // or `--client` on a slice generated bare earlier is the normal way those
   // get added, so the existing files are not an error.
@@ -114,7 +117,7 @@ export async function generatePage(rawName: string | undefined, opts: PageOption
   // which Next.js rejects at build time ("two parallel pages that resolve to
   // the same path") — a broken build from a command that printed success.
   const existingRoute = extending
-    ? findRouteFor(process.cwd(), config.appDir, config.alias, naming.name)
+    ? findRouteFor(process.cwd(), config.appDir, sliceImportPath(config.alias, config.srcDir, root, "_pages", naming.directory))
     : undefined;
 
   const hasContent = Boolean(client || auth);
@@ -125,6 +128,7 @@ export async function generatePage(rawName: string | undefined, opts: PageOption
     title: title || toTitleCase(naming.name),
     hasContent,
     auth: Boolean(auth),
+    pageAlias: sliceImportPrefix(config.alias, config.srcDir, root),
   };
 
   const written = await applyTemplates(
@@ -224,10 +228,36 @@ export async function generatePage(rawName: string | undefined, opts: PageOption
   }
 }
 
+export async function generatePages(rawNames: string[] | undefined, opts: PageOptions): Promise<void> {
+  const names = expandNames(rawNames);
+  if (names.length > 1 && opts.route !== undefined) {
+    throw new Error("--route can be used with only one page; omit it to use each page name as its route");
+  }
+  // One --title cannot describe several pages: leave it unset so each page
+  // falls back to the Title Case of its own name instead of sharing one.
+  const pageOpts = names.length > 1 && opts.title === undefined ? { ...opts, title: "" } : opts;
+  for (const name of names.length > 0 ? names : [undefined]) {
+    await generatePage(name, pageOpts);
+  }
+}
+
 export interface SliceOptions {
   segments?: string;
   errors?: boolean;
   defaults?: boolean;
+  /** FSD root relative to the project, defaulting to the configured srcDir. */
+  root?: string;
+}
+
+export async function generateSlices(
+  rawLayer: string | undefined,
+  rawNames: string[] | undefined,
+  opts: SliceOptions
+): Promise<void> {
+  const names = expandNames(rawNames);
+  for (const name of names.length > 0 ? names : [undefined]) {
+    await generateSlice(rawLayer, name, opts);
+  }
 }
 
 export async function generateSlice(
@@ -237,6 +267,7 @@ export async function generateSlice(
 ): Promise<void> {
   const config = readConfig(process.cwd());
   assertSliceInputs(rawLayer, rawName, opts);
+  const root = resolveFsdRoot(config.srcDir, opts.root);
 
   const layer =
     parseLayer(rawLayer) ??
@@ -252,10 +283,10 @@ export async function generateSlice(
   const name =
     rawName ??
     (await input({
-      message: `Slice name (kebab-case, becomes ${config.srcDir}/${layer}/<name>/):`,
-      validate: validateSliceName,
+      message: `Slice name (kebab-case or group/name, becomes ${root}/${layer}/<name>/):`,
+      validate: validateSlicePath,
     }));
-  const naming = resolveNaming(name);
+  const naming = resolveSliceNaming(name);
 
   const chosen = opts.segments
     ? parseSegments(opts.segments)
@@ -307,7 +338,7 @@ export async function generateSlice(
   // Only the segments that are not on disk yet. Drives both what gets written
   // and which export lines join an existing index.ts, so extending a slice
   // never re-announces a segment it already had.
-  const onDisk = existingSegments(process.cwd(), slicePath(config.srcDir, layer, naming.name), naming.name);
+  const onDisk = existingSegments(process.cwd(), slicePath(root, layer, naming.directory), naming.name);
   const added = Object.fromEntries(
     Object.entries(segments).map(([segment, wanted]) => [segment, wanted && !onDisk.includes(segment)])
   );
@@ -322,7 +353,7 @@ export async function generateSlice(
     needsClient: segments.model,
   };
 
-  const slice = slicePath(config.srcDir, layer, naming.name);
+  const slice = slicePath(root, layer, naming.directory);
   const extending = fs.existsSync(path.join(process.cwd(), slice));
   const entries: TemplateEntry[] = [
     // index.ts is handled separately when extending: it has to gain the new
@@ -370,7 +401,7 @@ export async function generateSlice(
   report(written);
   if (extending) console.log(pc.dim(`\nextended the existing ${naming.name} slice; untouched files were left alone.`));
   console.log(
-    `\n${pc.dim("imported as")} import { ${naming.pascal} } from "${config.alias}/${layer}/${naming.name}";` +
+    `\n${pc.dim("imported as")} import { ${naming.pascal} } from "${sliceImportPath(config.alias, config.srcDir, root, layer, naming.directory)}";` +
       `\n${pc.dim("only through that index.ts — reaching into ui/ is the boundary violation steiger reports.")}` +
       `\n${pc.dim("until something imports it, steiger reports fsd/insignificant-slice — that is the linter working, not a mistake.")}`
   );
@@ -384,12 +415,12 @@ export async function generateSlice(
  * would predict, and the whole point is to notice a route that is not where
  * the default would have put it.
  */
-function findRouteFor(projectDir: string, appDir: string, alias: string, name: string): string | undefined {
+function findRouteFor(projectDir: string, appDir: string, importPath: string): string | undefined {
   const root = path.join(projectDir, appDir);
   if (!fs.existsSync(root)) return undefined;
   // Both public API entries: a page with a client leaf is routed from
   // "<slice>/index.server", a server-only one from "<slice>".
-  const markers = [`${alias}/_pages/${name}"`, `${alias}/_pages/${name}/index.server"`];
+  const markers = [`${importPath}"`, `${importPath}/index.server"`];
   for (const entry of fs.readdirSync(root, { recursive: true, encoding: "utf8" })) {
     if (path.basename(entry) !== "page.tsx") continue;
     const file = path.join(root, entry);
@@ -421,6 +452,43 @@ function slicePath(srcDir: string, layer: string, name: string): string {
   return `${srcDir}/${layer}/${name}`;
 }
 
+function sliceImportPrefix(alias: string, srcDir: string, root: string): string {
+  const relativeRoot = path.posix.relative(srcDir, root);
+  return relativeRoot === "" ? alias : `${alias}/${relativeRoot}`;
+}
+
+function sliceImportPath(alias: string, srcDir: string, root: string, layer: string, directory: string): string {
+  return `${sliceImportPrefix(alias, srcDir, root)}/${layer}/${directory}`;
+}
+
+function resolveFsdRoot(srcDir: string, rawRoot: string | undefined): string {
+  const configuredRoot = normalizeProjectRelativePath(srcDir, "configured srcDir");
+  const root = rawRoot === undefined ? configuredRoot : normalizeProjectRelativePath(rawRoot, "--root");
+  if (root !== configuredRoot && !root.startsWith(`${configuredRoot}/`)) {
+    throw new Error(`--root must stay inside ${configuredRoot}/ so the @ alias can resolve generated imports`);
+  }
+  return root;
+}
+
+function normalizeProjectRelativePath(raw: string, label: string): string {
+  const value = raw.trim().replaceAll("\\", "/");
+  if (!value || value.startsWith("/") || /^[A-Za-z]:\//.test(value)) {
+    throw new Error(`${label} must be a relative path, for example "src" or "src/domain"`);
+  }
+  const normalized = path.posix.normalize(value);
+  if (normalized === "." || normalized === ".." || normalized.startsWith("../")) {
+    throw new Error(`${label} must stay inside the project, for example "src" or "src/domain"`);
+  }
+  return normalized;
+}
+
+function expandNames(rawNames: string[] | undefined): string[] {
+  return (rawNames ?? [])
+    .flatMap((name) => name.split(","))
+    .map((name) => name.trim())
+    .filter(Boolean);
+}
+
 /** Where each segment's generated file lands, relative to the slice. */
 function segmentFile(segment: string, name: string): string {
   return segment === "errors" ? `model/${name}-errors.ts` : `${segment}/${name}.${segment === "ui" ? "tsx" : "ts"}`;
@@ -446,13 +514,26 @@ export function existingPages(projectDir: string, srcDir: string): string[] {
 function parseLayer(value: string | undefined): SliceLayer | undefined {
   if (value === undefined) return undefined;
   const normalized = value.trim().toLowerCase();
-  if (!SLICE_LAYERS.includes(normalized as SliceLayer)) {
+  const aliases: Record<string, SliceLayer> = {
+    f: "features",
+    feat: "features",
+    feature: "features",
+    features: "features",
+    e: "entities",
+    entity: "entities",
+    entities: "entities",
+    w: "widgets",
+    widget: "widgets",
+    widgets: "widgets",
+  };
+  const layer = aliases[normalized];
+  if (layer === undefined) {
     throw new Error(
-      `unknown layer "${value}" — use ${SLICE_LAYERS.join(", ")}.\n` +
+      `unknown layer "${value}" — use ${SLICE_LAYERS.join(", ")} (aliases: f/e/w).\n` +
         "`_pages` slices come from `generate page`, and `_app`/`shared` are written by `init` and `add`."
     );
   }
-  return normalized as SliceLayer;
+  return layer;
 }
 
 function parseSegments(value: string): Segment[] {

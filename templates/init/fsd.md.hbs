@@ -232,12 +232,19 @@ trip rather than correctness.
 
 ```bash
 nextjs-fsd generate page <name>            # slice + {{appDir}}/<name>/page.tsx
+nextjs-fsd generate page <a> <b>           # several at once, each routed by its own name
 nextjs-fsd generate slice features <name>  # a feature slice
+nextjs-fsd generate slice features employee/employee-record  # a slice group
 nextjs-fsd generate layout admin           # _app/layouts + {{appDir}}/(admin)/layout.tsx
 nextjs-fsd generate api-route health       # _app/api-routes + {{appDir}}/api/health/route.ts
 nextjs-fsd add error-handling              # shared/api: ApiError, catalogs, client
 nextjs-fsd add auth                        # shared/auth: session, guard, login page
 ```
+
+`--root` (short `-r`) aims a page or slice at another FSD root inside
+`{{srcDir}}/` instead, such as `{{srcDir}}/domain` — the generated imports
+follow it. A root outside `{{srcDir}}/` is refused: the `@` alias cannot
+resolve imports from there.
 
 Re-running a generate command extends what is there instead of refusing, so
 `--errors` or `--client` on a page built bare earlier just adds the file. It

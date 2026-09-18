@@ -14,7 +14,7 @@ import {
   writeJson,
 } from "../dist/utils/project.js";
 import { addTailwindSources } from "../dist/commands/init.js";
-import { validateSliceName, validateRoute, resolveNaming } from "../dist/utils/naming.js";
+import { validateSliceName, validateRoute, resolveNaming, resolveSliceNaming, validateSlicePath } from "../dist/utils/naming.js";
 
 // The layout create-next-app@16 writes. `{ children }` appears twice here and
 // the first one is the parameter — patching that one is what this pins down.
@@ -97,10 +97,26 @@ test("names that would not compile are rejected before anything is written", () 
   assert.match(String(validateSliceName("!!")), /invalid name/);
   assert.deepEqual(resolveNaming("resetPassword"), {
     name: "reset-password",
+    directory: "reset-password",
     pascal: "ResetPassword",
     camel: "resetPassword",
     screaming: "RESET_PASSWORD",
   });
+  assert.deepEqual(resolveSliceNaming("employee/employee-record"), {
+    name: "employee-record",
+    directory: "employee/employee-record",
+    pascal: "EmployeeRecord",
+    camel: "employeeRecord",
+    screaming: "EMPLOYEE_RECORD",
+  });
+});
+
+test("slice groups validate per part, and reject empty parts and backslashes", () => {
+  assert.equal(validateSlicePath("employee/employee-record"), true);
+  assert.match(String(validateSlicePath("employee//record")), /cannot be empty/);
+  assert.match(String(validateSlicePath("employee\\record")), /separated by "\/"/);
+  assert.match(String(validateSlicePath("2fa")), /starts with a digit/);
+  assert.match(String(validateSlicePath("employee/2fa")), /starts with a digit/);
 });
 
 test("App Router route shapes are accepted, junk is not", () => {
