@@ -320,11 +320,18 @@ check("add auth pulls in error handling first", () =>
     "src/shared/auth/session.ts",
     "src/shared/ui/form-error.tsx",
     "src/_app/providers/index.tsx",
+    "src/_pages/login/index.ts",
+    "src/_pages/login/index.server.ts",
     "src/_pages/login/ui/login-form.tsx",
     "app/login/page.tsx",
     ".env.example",
   ])
 );
+check("the login slice splits its public API like a generated page with a leaf", () => {
+  assert.match(read(a, "src/_pages/login/index.ts"), /export \{ LoginForm \}/);
+  assert.match(read(a, "src/_pages/login/index.server.ts"), /export \{ LoginPage, metadata \}/);
+  assert.match(read(a, "app/login/page.tsx"), /from "@\/_pages\/login\/index\.server";/);
+});
 check("<Providers> wraps the JSX children, not the destructured parameter", () => {
   const layout = read(a, "app/layout.tsx");
   assert.match(layout, /RootLayout\(\{ children \}: LayoutProps<"\/">\)/);
@@ -357,6 +364,7 @@ cli(a, ["generate", "page", "dashboard", "--auth", "--errors", "--route", "(admi
 check("a page slice, its leaf, its catalog and its route file", () =>
   assertFiles(a, [
     "src/_pages/dashboard/index.ts",
+    "src/_pages/dashboard/index.server.ts",
     "src/_pages/dashboard/ui/dashboard-page.tsx",
     "src/_pages/dashboard/ui/dashboard-content.tsx",
     "src/_pages/dashboard/model/dashboard-errors.ts",
@@ -364,8 +372,29 @@ check("a page slice, its leaf, its catalog and its route file", () =>
   ])
 );
 check("the route file re-exports metadata too, not just default", () =>
-  assert.match(read(a, "app/(admin)/dashboard/page.tsx"), /export \{ DashboardPage as default, metadata \}/)
+  assert.match(
+    read(a, "app/(admin)/dashboard/page.tsx"),
+    /export \{ DashboardPage as default, metadata \} from "@\/_pages\/dashboard\/index\.server";/
+  )
 );
+check("a page with a client leaf splits its public API in two", () => {
+  // index.ts is the client-safe half: any Client Component importing the slice
+  // must not pull the server component into the client graph.
+  assert.match(read(a, "src/_pages/dashboard/index.ts"), /export \{ DashboardContent \}/);
+  assert.doesNotMatch(read(a, "src/_pages/dashboard/index.ts"), /DashboardPage/);
+  assert.doesNotMatch(read(a, "src/_pages/dashboard/index.ts"), /^export \{[^}]*metadata/m);
+  // index.server.ts is the server-only half the route file imports.
+  assert.match(
+    read(a, "src/_pages/dashboard/index.server.ts"),
+    /export \{ DashboardPage, metadata \} from "\.\/ui\/dashboard-page";/
+  );
+});
+check("a server-only page keeps the single-entry public API", () => {
+  cli(a, ["generate", "page", "plain", "--defaults"]);
+  assert.match(read(a, "src/_pages/plain/index.ts"), /export \{ PlainPage, metadata \}/);
+  assert.match(read(a, "app/plain/page.tsx"), /from "@\/_pages\/plain";/);
+  assert.ok(!has(a, "src/_pages/plain/index.server.ts"), "a server-only page needs no index.server.ts");
+});
 check("--auth puts the guard on the client leaf, not the page", () => {
   assert.match(read(a, "src/_pages/dashboard/ui/dashboard-content.tsx"), /"use client";[\s\S]*useRequireSession/);
   // The page's comment mentions "use client"; only a leading directive counts.
@@ -384,6 +413,8 @@ check("extending a page routed from a group does not add a second route file", (
   const output = cli(a, ["generate", "page", "settings", "--client", "--defaults"]);
   assert.match(output, /already routed from app\/\(admin\)\/settings\/page\.tsx/);
   assert.ok(has(a, "src/_pages/settings/ui/settings-content.tsx"), "the new leaf was not written");
+  assert.ok(has(a, "src/_pages/settings/index.server.ts"), "the server-only entry was not written");
+  assert.match(output, /finish the split by hand/);
   assert.ok(!has(a, "app/settings/page.tsx"), "a duplicate route was written");
   assert.ok(!has(a, "app/dashboard/page.tsx"), "a duplicate route was written");
 });

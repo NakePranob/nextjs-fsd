@@ -126,7 +126,8 @@ not a failure to work around.
 Two consequences worth knowing:
 
 - The page component is an existing file, so a leaf added later is not rendered
-  by anything yet. The command prints the one import line to add; add it.
+  by anything yet. The command prints the lines to add — the leaf import, plus
+  finishing the `index.server.ts` split below; add them.
 - A page already routed from elsewhere does not get a second route file. Two
   `page.tsx` resolving to one URL is a Next.js build error.
 
@@ -135,10 +136,17 @@ Two consequences worth knowing:
 Breaking one of these is silent — the build passes and the app is wrong.
 
 - **A route file re-exports the page *and* its `metadata`.** `export { X as
-  default } from "..."` alone drops the page title with no error.
+  default } from "..."` alone drops the page title with no error — from the
+  slice root, or from `<slice>/index.server` when the page has a client leaf.
 - **`"use client"` goes on the leaf, not the page.** A page component stays a
   server component; state, effects and events live in a `ui/<thing>.tsx`.
-- **Imports point downwards, and a slice is entered through its `index.ts`.**
+- **A page with a client leaf has two public API entries.** `index.ts` carries
+  only the client-safe leaf; the server component and `metadata` live in
+  `index.server.ts`, which is what the route imports. A Client Component
+  importing the slice must never pull the server module into the client graph,
+  which Next.js rejects at build time.
+- **Imports point downwards, and a slice is entered through its public API
+  (`index.ts`, or `index.server.ts` for server-only modules).**
   `{{alias}}/features/x`, never `{{alias}}/features/x/ui/x`. Inside a slice the
   import is relative.
 - **Never render `error.message` as UI copy.** Add the code to the domain's own

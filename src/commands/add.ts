@@ -222,11 +222,14 @@ export async function addAuth(opts: AddOptions): Promise<void> {
       { template: "add/auth/auth-errors.ts.hbs", output: `${auth}/auth-errors.ts` },
       { template: "add/auth/index.ts.hbs", output: `${auth}/index.ts` },
       { template: "add/auth/login-index.ts.hbs", output: `${slice}/index.ts` },
+      { template: "add/auth/login-index.server.ts.hbs", output: `${slice}/index.server.ts` },
       { template: "add/auth/login-page.tsx.hbs", output: `${slice}/ui/login-page.tsx` },
       { template: "add/auth/login-form.tsx.hbs", output: `${slice}/ui/login-form.tsx` },
       { template: "generate/page/route.tsx.hbs", output: path.posix.join(config.appDir, "login", "page.tsx") },
     ],
-    { ...context, name: "login", pascal: "Login" }
+    // The login form is a "use client" leaf, so the route re-exports from the
+    // server-only entry — same split `generate page --auth` writes.
+    { ...context, name: "login", pascal: "Login", hasContent: true }
   );
 
   setFeature(projectDir, "auth", true);

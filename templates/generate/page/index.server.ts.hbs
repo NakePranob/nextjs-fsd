@@ -1,0 +1,7 @@
+// The server-only half of this slice's public API. A page that renders a
+// "use client" leaf cannot export its server component (and metadata) from
+// index.ts: any Client Component importing the slice would pull the server
+// module into the client graph, which Next.js rejects at build time. So the
+// route file imports from here — "{{alias}}/_pages/{{name}}/index.server" —
+// and index.ts carries only the client-safe leaf.
+export { {{pascal}}Page, metadata } from "./ui/{{name}}-page";

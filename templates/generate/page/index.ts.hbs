@@ -1,1 +1,9 @@
+{{#if hasContent}}
+// The client-safe half of this slice's public API: the "use client" leaf that
+// a Client Component elsewhere can import without pulling the server component
+// (and its metadata) into the client module graph, which Next.js rejects at
+// build time. The page itself lives in index.server.ts, next to this file.
+export { {{pascal}}Content } from "./ui/{{name}}-content";
+{{else}}
 export { {{pascal}}Page, metadata } from "./ui/{{name}}-page";
+{{/if}}

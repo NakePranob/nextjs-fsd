@@ -126,6 +126,14 @@ export async function generatePage(rawName: string | undefined, opts: PageOption
     process.cwd(),
     [
       { template: "generate/page/index.ts.hbs", output: `${slice}/index.ts` },
+      {
+        // Server-only half of the public API, next to index.ts: a page with a
+        // "use client" leaf cannot export its server component from index.ts
+        // without breaking any Client Component that imports the slice.
+        template: "generate/page/index.server.ts.hbs",
+        output: `${slice}/index.server.ts`,
+        when: () => hasContent,
+      },
       { template: "generate/page/page.tsx.hbs", output: `${slice}/ui/${naming.name}-page.tsx` },
       {
         template: "generate/page/content.tsx.hbs",
@@ -171,6 +179,16 @@ export async function generatePage(rawName: string | undefined, opts: PageOption
       console.log(
         pc.yellow(`ui/${naming.name}-page.tsx does not render it yet — add:`) +
           `\n  import { ${naming.pascal}Content } from "./${naming.name}-content";`
+      );
+    }
+    // index.server.ts is new, but index.ts and the route file still carry the
+    // old single-entry shape — both would keep working, and both would keep
+    // the server module in the client's reach. Say the two lines that finish
+    // the split.
+    if (written.some((file) => file.endsWith("index.server.ts"))) {
+      console.log(
+        pc.yellow(`index.server.ts now carries the page and its metadata — finish the split by hand:`) +
+          `\n  trim ${slice}/index.ts to the Content export, and repoint the route at "${config.alias}/_pages/${naming.name}/index.server".`
       );
     }
   }
@@ -358,11 +376,14 @@ export async function generateSlice(
 function findRouteFor(projectDir: string, appDir: string, alias: string, name: string): string | undefined {
   const root = path.join(projectDir, appDir);
   if (!fs.existsSync(root)) return undefined;
-  const marker = `${alias}/_pages/${name}"`;
+  // Both public API entries: a page with a client leaf is routed from
+  // "<slice>/index.server", a server-only one from "<slice>".
+  const markers = [`${alias}/_pages/${name}"`, `${alias}/_pages/${name}/index.server"`];
   for (const entry of fs.readdirSync(root, { recursive: true, encoding: "utf8" })) {
     if (path.basename(entry) !== "page.tsx") continue;
     const file = path.join(root, entry);
-    if (fs.readFileSync(file, "utf8").includes(marker)) {
+    const source = fs.readFileSync(file, "utf8");
+    if (markers.some((marker) => source.includes(marker))) {
       return path.posix.join(appDir, entry.split(path.sep).join("/"));
     }
   }

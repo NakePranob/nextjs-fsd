@@ -251,12 +251,13 @@ contribute nothing to the URL, so `--route "(admin)/dashboard"` serves
 ### What it generates
 
 ~~~text
-src/_pages/dashboard/index.ts                     # public API — the only thing app/ imports
+src/_pages/dashboard/index.ts                     # client-safe public API (the leaf) — or the page, when server-only
+src/_pages/dashboard/index.server.ts              # --client / --auth: the page + metadata (the server-only entry)
 src/_pages/dashboard/ui/dashboard-page.tsx        # server component + `metadata`
 src/_pages/dashboard/ui/dashboard-content.tsx     # --client / --auth: the "use client" leaf
 src/_pages/dashboard/model/dashboard.ts           # --model: query key, hooks, the record type
 src/_pages/dashboard/model/dashboard-errors.ts    # --errors: this page's error catalog
-app/(admin)/dashboard/page.tsx                    # re-exports the page and its metadata
+app/(admin)/dashboard/page.tsx                    # re-exports the page and its metadata (from index.server when there is a leaf)
 ~~~
 
 The route file re-exports **both** the component and `metadata`. A route file
@@ -265,6 +266,11 @@ anywhere.
 
 `"use client"` goes on the leaf, never on the page: a page component that
 needs the browser ships its whole tree to it.
+
+A page with a leaf has **two public API entries**. `index.ts` carries only the
+client-safe leaf, so a Client Component importing the slice never pulls the
+server module into the client graph (a build error); the server component and
+`metadata` live in `index.server.ts`, which is what the route file imports.
 
 `--model` writes the same file a slice's `api` segment gets — a query key, a
 record type, a list query and a mutation that invalidates the key — into
@@ -616,7 +622,8 @@ src/
 │   ├── ui/<page>-page.tsx             # server component + metadata
 │   ├── ui/<thing>.tsx                 # "use client" only on the leaves
 │   ├── model/<page>-errors.ts         # this page's error catalog
-│   └── index.ts                       # public API
+│   ├── index.ts                       # client-safe public API (the leaf, or the page when server-only)
+│   └── index.server.ts                # with a leaf: the page + metadata, what the route imports
 ├── features/<slice>/                  # a whole user action, once two pages need it
 ├── entities/<slice>/                  # a business object, once two features need it
 └── shared/                            # infrastructure only

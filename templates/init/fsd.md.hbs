@@ -117,11 +117,18 @@ A route file re-exports an FSD page and nothing else:
 
 ```tsx
 // {{appDir}}/login/page.tsx
-export { LoginPage as default, metadata } from "{{alias}}/_pages/login";
+export { LoginPage as default, metadata } from "{{alias}}/_pages/login/index.server";
 ```
 
 Export `metadata` alongside the component — a route file that only
 re-exports `default` silently drops the page's title.
+
+The login page renders a client form, so its route imports from the
+server-only entry: `index.server.ts` carries the page and its `metadata`,
+while `index.ts` carries only the client-safe leaf. A server-only page has no
+split — its route imports from the slice root. Either way a Client Component
+importing the slice must never pull the server module into the client graph,
+which Next.js rejects at build time.
 
 ## Segments
 
@@ -142,7 +149,8 @@ nextjs-fsd generate slice features checkout --segments ui,model  # adds model/
 {{srcDir}}/_pages/<page>/
 ├── ui/<page>-page.tsx  # server component + `metadata`
 ├── ui/<thing>.tsx      # "use client" only on the leaves that need it
-└── index.ts            # public API — the only thing {{appDir}}/ imports
+├── index.ts            # client-safe public API (the leaf) — or the page, when server-only
+└── index.server.ts     # with a leaf: the page + `metadata`, which is what {{appDir}}/ imports
 ```
 
 ## Server vs. client components
