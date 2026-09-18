@@ -82,7 +82,8 @@ to do and then delegates:
 
 ~~~bash
 nextjs-fsd            # menu: generate / add / show config
-nextjs-fsd generate   # menu: page / slice / layout
+nextjs-fsd wizard     # same menu, explicit form
+nextjs-fsd generate   # menu: page / slice / layout / api-route
 nextjs-fsd add        # menu: error handling / auth
 ~~~
 
@@ -228,7 +229,7 @@ at the tree rather than assumed false.
 nextjs-fsd generate page settings
 nextjs-fsd generate page dashboard --auth
 nextjs-fsd generate page dashboard --route "(admin)/dashboard" --errors
-nextjs-fsd generate page dealers --client --model
+nextjs-fsd generate page dealers --client --api
 nextjs-fsd generate page loans --route "loans/[id]" --client
 nextjs-fsd g p settings --defaults
 ~~~
@@ -242,7 +243,8 @@ nextjs-fsd g p settings --defaults
 | --no-route | Write the slice only, no route file |
 | --client | Also create a `"use client"` leaf component |
 | --auth | The client leaf sits behind `useRequireSession` (needs `add auth`) |
-| --model | Add this page's TanStack Query hooks (needs `add error-handling`) |
+| --api | Add this page's TanStack Query hooks under `api/` (needs `add error-handling`) |
+| --model | Legacy alias for `--api` |
 | --errors | Add this page's own error catalog (needs `add error-handling`) |
 | --defaults | Skip every question: server component only, route = the page name |
 
@@ -258,7 +260,7 @@ src/_pages/dashboard/index.ts                     # client-safe public API (the 
 src/_pages/dashboard/index.server.ts              # --client / --auth: the page + metadata (the server-only entry)
 src/_pages/dashboard/ui/dashboard-page.tsx        # server component + `metadata`
 src/_pages/dashboard/ui/dashboard-content.tsx     # --client / --auth: the "use client" leaf
-src/_pages/dashboard/model/dashboard.ts           # --model: query key, hooks, the record type
+src/_pages/dashboard/api/dashboard.ts             # --api: query key, hooks, the record type
 src/_pages/dashboard/model/dashboard-errors.ts    # --errors: this page's error catalog
 app/(admin)/dashboard/page.tsx                    # re-exports the page and its metadata (from index.server when there is a leaf)
 ~~~
@@ -275,11 +277,12 @@ client-safe leaf, so a Client Component importing the slice never pulls the
 server module into the client graph (a build error); the server component and
 `metadata` live in `index.server.ts`, which is what the route file imports.
 
-`--model` writes the same file a slice's `api` segment gets — a query key, a
+`--api` writes the same file a slice's `api` segment gets — a query key, a
 record type, a list query and a mutation that invalidates the key — into
-`model/`, because a page keeps what it knows about its own data in one
-segment. It stays internal to the slice: the page's `index.ts` exports the
-page, not its hooks.
+`api/`, because that is an API integration. The page's `model/` remains
+available for frontend state, schemas, validation, and business logic. It
+stays internal to the slice: the page's `index.ts` exports the page, not its
+hooks. The old `--model` flag remains as a compatibility alias for `--api`.
 
 ## generate slice [layer] [name] — add a features/entities slice
 
@@ -303,7 +306,7 @@ record that decision in `docs/fsd.md`.
 
 | Option | Effect |
 |---|---|
-| --segments \<list\> | Comma-separated: `ui,model,api,lib`; defaults to `ui` |
+| --segments \<list\> | Comma-separated: `ui,model,api,lib,config`; defaults to `ui` |
 | --errors | Add this slice's own error catalog (needs `add error-handling`) |
 | --defaults | Skip every question: the `ui` segment only |
 
@@ -318,6 +321,7 @@ noise. `ui/` alone is the common case.
 | model | State and hooks | A `use<Name>` hook |
 | api | Requests | A TanStack Query hook, a mutation that invalidates its key, and the record type |
 | lib | Pure helpers | A formatting function |
+| config | Flags and settings | A `<name>Config` object for values that change between environments or rollouts |
 
 The `api` segment requires `add error-handling`, and says so rather than
 generating a bare `fetch` — which would skip the bearer token, the
@@ -331,6 +335,7 @@ src/entities/loan/ui/loan.tsx          # ui
 src/entities/loan/model/loan.ts        # model
 src/entities/loan/api/loan.ts          # api — LoanRecord, loanKey, useLoanQuery, useCreateLoan
 src/entities/loan/lib/loan.ts          # lib
+src/entities/loan/config/loan.ts       # config — loanConfig flags and settings
 src/entities/loan/model/loan-errors.ts # --errors
 ~~~
 
@@ -510,9 +515,10 @@ src/shared/api/error-catalog.ts   # the codes every endpoint can answer with
 src/shared/api/error-resolver.ts  # code -> one sentence, from the caller's catalogs
 src/shared/api/client.ts          # axios instance: bearer token in, ApiError out
 src/shared/api/query-client.ts    # QueryClient + sessionKey; a 401 anywhere ends the session
-src/shared/api/client.test.ts     # bun projects only: the two silent refresh rules
+src/shared/api/client.test.ts     # bun or vitest: the two silent refresh rules
 src/shared/api/index.ts
 src/shared/auth/access-token.ts   # the in-memory token the interceptor reads
+src/shared/auth/index.ts          # its export alone, until `add auth` fills in the rest
 src/shared/config/env.ts          # NEXT_PUBLIC_API_URL
 src/shared/ui/form-error.tsx      # renders a failure, owning no copy of its own
 src/_app/providers/index.tsx      # created if absent, and wired into layout.tsx
@@ -520,7 +526,8 @@ src/_app/providers/index.tsx      # created if absent, and wired into layout.tsx
 ~~~
 
 Adds `axios` and `@tanstack/react-query`, plus `@types/bun` and a `test`
-script on a bun project.
+script on a bun project. The test is written wherever it runs with no extra
+setup — `bun test` or vitest — and skipped elsewhere with the reason printed.
 
 ### The rules this encodes
 
@@ -584,10 +591,11 @@ so there is no choice to offer.
 ~~~text
 src/shared/auth/session.ts          # useSession, useLogin, useLogout
 src/shared/auth/require-session.ts  # useRequireSession + safeNext — UX, not the gate
-src/shared/auth/require-session.test.ts  # bun projects only: the ?next= guard
+src/shared/auth/require-session.test.ts  # bun or vitest: the ?next= guard
 src/shared/auth/auth-errors.ts      # the auth surface's own catalog
 src/shared/auth/index.ts
 src/_pages/login/index.ts
+src/_pages/login/index.server.ts    # the page + metadata (the form is a client leaf)
 src/_pages/login/ui/login-page.tsx  # server component
 src/_pages/login/ui/login-form.tsx  # "use client" leaf, native HTML validation
 app/login/page.tsx

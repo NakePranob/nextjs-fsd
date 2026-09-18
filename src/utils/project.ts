@@ -22,6 +22,12 @@ export function readPackageJson(projectDir: string): PackageJson {
   return fs.readJsonSync(file) as PackageJson;
 }
 
+/** Whether the project's package.json depends on a package, in either range. */
+export function hasDependency(projectDir: string, name: string): boolean {
+  const pkg = readPackageJson(projectDir);
+  return Boolean(pkg.dependencies?.[name] ?? pkg.devDependencies?.[name]);
+}
+
 /**
  * Writes JSON back with the indentation the file already had.
  *
@@ -198,7 +204,13 @@ export function addDependencies(
 export function installDependencies(projectDir: string, manager: PackageManager): void {
   const command = manager === "npm" ? ["npm", "install"] : [manager, "install"];
   console.log(pc.dim(`> ${command.join(" ")}`));
-  execFileSync(command[0], command.slice(1), { cwd: projectDir, stdio: "inherit" });
+  // npm, pnpm and yarn are .cmd shims on Windows, which execFile cannot start
+  // directly — through a shell it resolves them like a terminal would.
+  execFileSync(command[0], command.slice(1), {
+    cwd: projectDir,
+    stdio: "inherit",
+    shell: process.platform === "win32",
+  });
 }
 
 export type HookResult =
@@ -272,7 +284,8 @@ function gitConfig(repoRoot: string, key: string): string | undefined {
 export function runCommand(projectDir: string, manager: PackageManager, args: string[]): void {
   const runner = manager === "npm" ? "npx" : manager === "yarn" ? "yarn" : manager === "pnpm" ? "pnpm" : "bunx";
   console.log(pc.dim(`> ${runner} ${args.join(" ")}`));
-  execFileSync(runner, args, { cwd: projectDir, stdio: "inherit" });
+  // Same .cmd shim problem as installDependencies, same fix.
+  execFileSync(runner, args, { cwd: projectDir, stdio: "inherit", shell: process.platform === "win32" });
 }
 
 /**

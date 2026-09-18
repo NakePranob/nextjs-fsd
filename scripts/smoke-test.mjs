@@ -29,7 +29,7 @@ function check(label, fn) {
 }
 
 /** The parts of a create-next-app@16 project that init and add actually read. */
-function fixture(dir, { srcApp = false, lockfile } = {}) {
+function fixture(dir, { srcApp = false, lockfile, vitest = false } = {}) {
   const appDir = srcApp ? path.join(dir, "src", "app") : path.join(dir, "app");
   fs.mkdirSync(appDir, { recursive: true });
   fs.writeFileSync(
@@ -40,7 +40,9 @@ function fixture(dir, { srcApp = false, lockfile } = {}) {
         private: true,
         scripts: { dev: "next dev", lint: "eslint" },
         dependencies: { next: "16.3.4", react: "19.2.8", "react-dom": "19.2.8" },
-        devDependencies: { typescript: "^5" },
+        // vitest here is never installed — the CLI only reads package.json to
+        // decide whether the generated tests import from it or from bun:test.
+        devDependencies: { typescript: "^5", ...(vitest ? { vitest: "^3" } : {}) },
       },
       null,
       2
@@ -429,6 +431,15 @@ cli(a, ["generate", "slice", "features", "loan-application", "--segments", "ui,m
 check("a segment can be added to a slice that already exists", () =>
   assertFiles(a, ["src/features/loan-application/model/loan-application.ts", "src/features/loan-application/api/loan-application.ts"])
 );
+
+cli(a, ["generate", "slice", "features", "loan-application", "--segments", "config", "--defaults"]);
+check("a config segment carries the slice's flags and joins the public API", () => {
+  assertFiles(a, ["src/features/loan-application/config/loan-application.ts"]);
+  assert.match(
+    read(a, "src/features/loan-application/index.ts"),
+    /export \{ loanApplicationConfig \} from "\.\/config\/loan-application";/
+  );
+});
 check("index.ts gains the new exports and keeps the old one", () => {
   const barrel = read(a, "src/features/loan-application/index.ts");
   assert.match(barrel, /export \{ LoanApplication \} from "\.\/ui\/loan-application";/);
@@ -489,14 +500,19 @@ check("a page that would guard itself under a guarded shell is told", () =>
   )
 );
 cli(a, ["generate", "page", "invoices", "--model", "--defaults"]);
-check("--model gives a page its query hooks, and keeps them inside the slice", () => {
-  const model = read(a, "src/_pages/invoices/model/invoices.ts");
-  assert.match(model, /export const invoicesKey = \["invoices"\] as const;/);
-  assert.match(model, /invalidateQueries\(\{ queryKey: invoicesKey \}\)/);
+check("--model is a legacy alias for --api, and both land in api/", () => {
+  const api = read(a, "src/_pages/invoices/api/invoices.ts");
+  assert.match(api, /export const invoicesKey = \["invoices"\] as const;/);
+  assert.match(api, /invalidateQueries\(\{ queryKey: invoicesKey \}\)/);
+  assert.ok(!has(a, "src/_pages/invoices/model/invoices.ts"), "query hooks do not belong in model/");
   // The public API of a page is the page. Hooks are the slice's own business,
   // imported relatively from its ui/.
   assert.doesNotMatch(read(a, "src/_pages/invoices/index.ts"), /invoicesKey/);
 });
+cli(a, ["generate", "page", "ledger", "--api", "--defaults"]);
+check("--api gives a page its query hooks in api/", () =>
+  assertFiles(a, ["src/_pages/ledger/api/ledger.ts"])
+);
 check("--guard is refused without auth", () => {
   const bare = fixture(path.join(root, "guard-bare"));
   cli(bare, ["init", "--no-install", "--defaults"]);
@@ -560,6 +576,12 @@ console.log("\nbun project");
 const c = fixture(path.join(root, "c"), { lockfile: "bun" });
 cli(c, ["init", "--no-install", "--defaults"]);
 cli(c, ["add", "error-handling", "--no-install", "-y"]);
+check("error handling leaves shared/auth with a public API, not a lone file", () => {
+  // A segment holding one file and no index.ts is a steiger error — and `add
+  // auth` may not run for months. The export is appended, so a project with
+  // its own index.ts keeps it.
+  assert.match(read(c, "src/shared/auth/index.ts"), /export \{ getAccessToken, setAccessToken \}/);
+});
 check("a bun project gets the refresh test and the types it needs to compile", () => {
   // Nothing else covers this template: the package manager is read from the
   // lockfile, so the npm-shaped fixtures above never generate it — and this is
@@ -582,6 +604,12 @@ check("a bun project gets the ?next= guard test too", () => {
   // test template is written at all — and the only place tsc sees it.
   assert.match(read(c, "src/shared/auth/require-session.test.ts"), /from "bun:test"/);
   assert.match(read(c, "src/shared/auth/require-session.test.ts"), /safeNext/);
+  // Installed error handling first, so the access-token line was appended —
+  // and installing auth on top kept it instead of duplicating it.
+  const barrel = read(c, "src/shared/auth/index.ts");
+  assert.match(barrel, /export \{ getAccessToken, setAccessToken \}/);
+  assert.match(barrel, /export \{ sessionKey, useLogin, useLogout, useSession/);
+  assert.equal(barrel.match(/from "\.\/access-token"/g).length, 1);
 });
 check("the login form picks ?next= back up instead of always landing home", () =>
   assert.match(read(c, "src/_pages/login/ui/login-form.tsx"), /router\.replace\(safeNext\(/)
@@ -612,6 +640,25 @@ check("a 401 from anywhere resets the session entry rather than removing it", ()
   // key has to live here and be imported back, never the other way round.
   // The prose above it says so; only an import would be the bug.
   assert.doesNotMatch(queryClient, /^import .*shared\/auth/m);
+});
+
+// ---------------------------------------------------------------- vitest shape
+
+console.log("\nvitest project");
+const v = fixture(path.join(root, "v"), { vitest: true });
+cli(v, ["init", "--no-install", "--defaults"]);
+cli(v, ["add", "error-handling", "--no-install", "-y"]);
+check("a vitest project gets the refresh test with vitest imports", () => {
+  // No bun lockfile, so this is the only place the vitest rendering is
+  // exercised — and it is rendering only: vitest is declared but never
+  // installed here, so no typecheck runs over this fixture.
+  assert.match(read(v, "src/shared/api/client.test.ts"), /from "vitest"/);
+  assert.ok(!JSON.parse(read(v, "package.json")).devDependencies?.["@types/bun"]);
+});
+cli(v, ["add", "auth", "--no-install", "-y"]);
+check("a vitest project gets the ?next= guard test with vitest imports", () => {
+  assert.match(read(v, "src/shared/auth/require-session.test.ts"), /from "vitest"/);
+  assert.match(read(v, "src/shared/auth/require-session.test.ts"), /safeNext/);
 });
 
 // ------------------------------------------------------------------- hooks

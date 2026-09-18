@@ -39,6 +39,15 @@ program
   )
   .version(cliVersion());
 
+// runTopMenu is defined below; function declarations hoist, so this command
+// can reference it before its definition in the file.
+program
+  .command("wizard")
+  .description("pick what to do from a menu (same as running nextjs-fsd with no arguments)")
+  .action(() => {
+    runTopMenu().catch(fail);
+  });
+
 program
   .command("init")
   .description("shape an existing Next.js App Router project into FSD layers (run this once, after create-next-app)")
@@ -97,7 +106,8 @@ generate
   .option("--no-route", "write the slice only, no route file")
   .option("--client", 'also create a "use client" leaf component')
   .option("--auth", "the client leaf sits behind useRequireSession (needs `add auth`)")
-  .option("--model", "add model/<name>.ts, this page's TanStack Query hooks (needs `add error-handling`)")
+  .option("--api", "add api/<name>.ts, this page's TanStack Query hooks (needs `add error-handling`)")
+  .option("--model", "legacy alias for --api")
   .option("--errors", "add model/<name>-errors.ts, this page's own error catalog (needs `add error-handling`)")
   .option("--defaults", "skip every question; server component only, route = the page name")
   .action(async (name, opts) => {
@@ -111,6 +121,7 @@ generate
         routeFile: noRoute ? false : undefined,
         client: opts.client,
         auth: opts.auth,
+        api: opts.api,
         model: opts.model,
         errors: opts.errors,
         defaults: opts.defaults,
@@ -124,7 +135,7 @@ generate
   .command("slice [layer] [name]")
   .alias("s")
   .description("scaffold a features/entities/widgets slice with only the segments it needs")
-  .option("--segments <list>", "comma-separated: ui,model,api,lib (default ui)")
+  .option("--segments <list>", "comma-separated: ui,model,api,lib,config (default ui)")
   .option("--errors", "add model/<name>-errors.ts, this slice's own error catalog (needs `add error-handling`)")
   .option("--defaults", "skip every question; ui segment only")
   .action(async (layer, name, opts) => {

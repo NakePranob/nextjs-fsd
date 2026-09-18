@@ -6,12 +6,13 @@ import { ProjectConfig } from "../types";
 import { confirm } from "../prompts";
 import { readConfig, setFeature } from "../utils/config";
 import { asCatalogEntries, copyFor } from "../utils/copy";
-import { applyTemplates, formatFiles, TemplateEntry } from "../utils/render";
+import { applyTemplates, formatFiles, renderTemplate, TemplateEntry } from "../utils/render";
 import {
   addDependencies,
   appendEnvExample,
   appendExport,
   appendScript,
+  hasDependency,
   installDependencies,
   patchLayoutProviders,
   runCommand,
@@ -65,7 +66,7 @@ export async function addErrorHandling(opts: AddOptions): Promise<string[]> {
     [
       `add ${pc.cyan(`${config.srcDir}/shared/api/`)} — ApiError, the error catalog + resolver, an axios client with a single-flight 401 refresh, and a QueryClient`,
       `add ${pc.cyan(`${config.srcDir}/shared/ui/form-error.tsx`)} and ${pc.cyan(`${config.srcDir}/shared/config/env.ts`)}`,
-      `add ${pc.cyan(`${config.srcDir}/shared/auth/access-token.ts`)} — the in-memory token the request interceptor reads (\`add auth\` fills in the rest)`,
+      `add ${pc.cyan(`${config.srcDir}/shared/auth/access-token.ts`)} — the in-memory token the request interceptor reads (\`add auth\` fills in the rest), plus its index.ts export so the segment lints clean until then`,
       ownsProviders
         ? `add ${pc.cyan(providersFile)} and wrap ${config.appDir}/layout.tsx in <Providers>`
         : pc.yellow(`leave your existing ${providersFile} alone — you add <QueryClientProvider> to it yourself`),
@@ -76,11 +77,16 @@ export async function addErrorHandling(opts: AddOptions): Promise<string[]> {
 
   // The refresh rules are the part that fails silently in a browser, so they
   // get the one test — but only where it runs with no extra setup. `bun test`
-  // resolves the tsconfig alias on its own; node:test and vitest both need
-  // config this CLI has no business writing into someone's project.
-  const writesTest = config.packageManager === "bun";
+  // resolves the tsconfig alias on its own; vitest runs inside the project's
+  // own Vite config, where the alias already resolves. Anything else needs a
+  // runner set up first — a setup this CLI has no business writing into
+  // someone's project.
+  const writesTest = config.packageManager === "bun" || hasDependency(projectDir, "vitest");
+  // bun first: on a bun project with vitest also installed, `bun test` still
+  // resolves the alias with no config and vitest still needs its own.
+  const testRunner = config.packageManager === "bun" ? "bun:test" : "vitest";
 
-  const context = errorContext(config);
+  const context = { ...errorContext(config), testRunner };
   const entries: TemplateEntry[] = [
     { template: "add/errors/api-error.ts.hbs", output: `${config.srcDir}/shared/api/api-error.ts` },
     { template: "add/errors/error-catalog.ts.hbs", output: `${config.srcDir}/shared/api/error-catalog.ts` },
@@ -102,6 +108,19 @@ export async function addErrorHandling(opts: AddOptions): Promise<string[]> {
 
   const written = await applyTemplates(projectDir, entries, context);
 
+  // shared/auth/ is not this command's segment, but the access token above
+  // is — and a segment holding one file and no index.ts is a steiger error,
+  // months before `add auth` may run. Appended rather than rendered, so a
+  // project that already has its own shared/auth/index.ts keeps it.
+  if (
+    appendExport(
+      projectDir,
+      `${config.srcDir}/shared/auth/index.ts`,
+      'export { getAccessToken, setAccessToken } from "./access-token";'
+    )
+  ) {
+    written.push(`${config.srcDir}/shared/auth/index.ts`);
+  }
   if (appendExport(projectDir, `${config.srcDir}/shared/ui/index.ts`, 'export { FormError } from "./form-error";')) {
     written.push(`${config.srcDir}/shared/ui/index.ts`);
   }
@@ -123,10 +142,14 @@ export async function addErrorHandling(opts: AddOptions): Promise<string[]> {
 
   // The two files above were edited as text, not rendered from a template, so
   // applyTemplates never saw them. Missing ones are skipped.
-  await formatFiles(projectDir, [`${config.appDir}/layout.tsx`, `${config.srcDir}/shared/ui/index.ts`]);
+  await formatFiles(projectDir, [
+    `${config.appDir}/layout.tsx`,
+    `${config.srcDir}/shared/ui/index.ts`,
+    `${config.srcDir}/shared/auth/index.ts`,
+  ]);
 
   const added = addDependencies(projectDir, API_DEPS);
-  if (writesTest) {
+  if (config.packageManager === "bun") {
     // next build type-checks every file under the project, the generated test
     // included — without these types `bun:test` is an unresolved module and
     // the production build fails on a file that only ever runs in bun.
@@ -154,8 +177,8 @@ export async function addErrorHandling(opts: AddOptions): Promise<string[]> {
   if (!writesTest) {
     console.log(
       pc.dim(
-        `\nno client.test.ts written: \`bun test\` resolves the ${config.alias}/ alias with no config, ` +
-          `${config.packageManager} needs a runner set up first. The single-flight refresh is the part worth pinning down when you add one.`
+        `\nno client.test.ts written: it runs under \`bun test\` or vitest, and neither is here. ` +
+          `Add vitest and the single-flight refresh is the test worth writing first.`
       )
     );
   }
@@ -201,14 +224,15 @@ export async function addAuth(opts: AddOptions): Promise<void> {
     opts
   );
 
-  const context = errorContext(config);
   const auth = `${config.srcDir}/shared/auth`;
   const slice = `${config.srcDir}/_pages/login`;
-  // Same rule as client.test.ts: `bun test` resolves the alias with no config,
-  // every other runner needs setup this CLI has no business writing. What it
-  // covers is the open-redirect guard on ?next=, which is the one thing here
-  // that fails as a security bug rather than a visible one.
-  const writesTest = config.packageManager === "bun";
+  // Same rule as client.test.ts: written where it runs with no extra setup —
+  // `bun test` or vitest. What it covers is the open-redirect guard on ?next=,
+  // which is the one thing here that fails as a security bug rather than a
+  // visible one.
+  const writesTest = config.packageManager === "bun" || hasDependency(projectDir, "vitest");
+  const testRunner = config.packageManager === "bun" ? "bun:test" : "vitest";
+  const context = { ...errorContext(config), testRunner };
   const written = await applyTemplates(
     projectDir,
     [
@@ -220,7 +244,6 @@ export async function addAuth(opts: AddOptions): Promise<void> {
         when: () => writesTest,
       },
       { template: "add/auth/auth-errors.ts.hbs", output: `${auth}/auth-errors.ts` },
-      { template: "add/auth/index.ts.hbs", output: `${auth}/index.ts` },
       { template: "add/auth/login-index.ts.hbs", output: `${slice}/index.ts` },
       { template: "add/auth/login-index.server.ts.hbs", output: `${slice}/index.server.ts` },
       { template: "add/auth/login-page.tsx.hbs", output: `${slice}/ui/login-page.tsx` },
@@ -231,6 +254,19 @@ export async function addAuth(opts: AddOptions): Promise<void> {
     // server-only entry — same split `generate page --auth` writes.
     { ...context, name: "login", pascal: "Login", hasContent: true }
   );
+
+  // No index.ts template entry above: `add error-handling` may already have
+  // appended the access-token export to one, and applyTemplates refuses
+  // collisions. Rendered from the same template as a fresh index.ts and
+  // appended line by line instead, so the lines cannot drift from the files
+  // they point at — and whatever is already there (including hand edits)
+  // survives. The access-token line is a no-op repeat by construction.
+  for (const line of renderTemplate("add/auth/index.ts.hbs", context).split("\n")) {
+    if (line.trim() !== "" && appendExport(projectDir, `${auth}/index.ts`, line)) {
+      if (!written.includes(`${auth}/index.ts`)) written.push(`${auth}/index.ts`);
+    }
+  }
+  await formatFiles(projectDir, [`${auth}/index.ts`]);
 
   setFeature(projectDir, "auth", true);
   report(written);

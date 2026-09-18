@@ -133,8 +133,8 @@ which Next.js rejects at build time.
 ## Segments
 
 A slice gets only the segments it has code for. `ui/` alone is the common
-case; add `model/` (state, hooks), `api/` (requests) or `lib/` (helpers) when
-that slice actually has them. An empty segment folder is noise.
+case; add `model/` (state, hooks), `api/` (requests), `lib/` (helpers) or
+`config/` (flags and settings) when that slice actually has them. An empty segment folder is noise.
 
 Adding one later is the normal path, not a rewrite — re-run the same command
 with the extra segment and it writes only what is missing, appending the new

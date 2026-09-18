@@ -18,6 +18,8 @@ export interface PageOptions {
   routeFile?: boolean;
   client?: boolean;
   auth?: boolean;
+  api?: boolean;
+  /** Legacy alias for api; keep it so existing scripts keep working. */
   model?: boolean;
   errors?: boolean;
   defaults?: boolean;
@@ -35,7 +37,10 @@ export async function generatePage(rawName: string | undefined, opts: PageOption
     }));
   const naming = resolveNaming(name);
 
-  let { client, auth, errors, model } = opts;
+  let { client, auth, errors } = opts;
+  // The canonical flag is --api; --model remains a legacy alias, but the
+  // generated code is an API integration and belongs in api/.
+  let api = opts.api ?? opts.model;
   let title = opts.title?.trim() || undefined;
   if (!opts.defaults) {
     if (auth === undefined && client === undefined) {
@@ -66,9 +71,9 @@ export async function generatePage(rawName: string | undefined, opts: PageOption
         })
       ).trim();
     }
-    if (model === undefined && config.features.errorHandling) {
-      model = await confirm({
-        message: `Add this page's query hooks (model/${naming.name}.ts)?`,
+    if (api === undefined && config.features.errorHandling) {
+      api = await confirm({
+        message: `Add this page's query hooks (api/${naming.name}.ts)?`,
         default: false,
       });
     }
@@ -86,9 +91,9 @@ export async function generatePage(rawName: string | undefined, opts: PageOption
   if (errors && !config.features.errorHandling) {
     throw new Error("--errors needs the error-handling feature — run `nextjs-fsd add error-handling` first");
   }
-  if (model && !config.features.errorHandling) {
+  if (api && !config.features.errorHandling) {
     throw new Error(
-      "--model needs the error-handling feature — run `nextjs-fsd add error-handling` first.\n" +
+      "--api (or legacy --model) needs the error-handling feature — run `nextjs-fsd add error-handling` first.\n" +
         "A bare fetch skips the bearer token, the single-flight 401 refresh, and the conversion into ApiError."
     );
   }
@@ -142,12 +147,12 @@ export async function generatePage(rawName: string | undefined, opts: PageOption
       },
       {
         // The same template a slice's api segment gets: a page is a slice too,
-        // and its requests have no reason to be shaped differently. It lands in
-        // model/ rather than api/, because a page keeps what it knows about its
-        // own data in one segment.
+        // and its requests have no reason to be shaped differently. The
+        // canonical flag is `--api`; `--model` remains a legacy alias, but the
+        // generated code is an API integration and belongs in api/.
         template: "generate/slice/api.ts.hbs",
-        output: `${slice}/model/${naming.name}.ts`,
-        when: () => Boolean(model),
+        output: `${slice}/api/${naming.name}.ts`,
+        when: () => Boolean(api),
       },
       {
         template: "generate/page/errors.ts.hbs",
@@ -167,7 +172,7 @@ export async function generatePage(rawName: string | undefined, opts: PageOption
   if (extending && written.length === 0) {
     throw new Error(
       `${slice} already has everything this would write.\n` +
-        "Pass --client, --model or --errors to add a leaf component, the query hooks, or an error catalog to it."
+        "Pass --client, --api (or legacy --model) or --errors to add a leaf component, the query hooks, or an error catalog to it."
     );
   }
   report(written);
@@ -267,6 +272,7 @@ export async function generateSlice(
               disabled: config.features.errorHandling ? false : "— needs `add error-handling` first",
             },
             { name: "lib — pure helpers", value: "lib" },
+            { name: "config — feature flags and slice settings", value: "config" },
           ],
         })) as Segment[]);
 
@@ -327,6 +333,11 @@ export async function generateSlice(
     { template: "generate/slice/model.ts.hbs", output: `${slice}/model/${naming.name}.ts`, when: () => segments.model },
     { template: "generate/slice/api.ts.hbs", output: `${slice}/api/${naming.name}.ts`, when: () => segments.api },
     { template: "generate/slice/lib.ts.hbs", output: `${slice}/lib/${naming.name}.ts`, when: () => segments.lib },
+    {
+      template: "generate/slice/config.ts.hbs",
+      output: `${slice}/config/${naming.name}.ts`,
+      when: () => segments.config,
+    },
     {
       template: "generate/slice/errors.ts.hbs",
       output: `${slice}/model/${naming.name}-errors.ts`,
