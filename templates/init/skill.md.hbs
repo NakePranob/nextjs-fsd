@@ -41,6 +41,7 @@ patterns, how strict to be — that is the `feature-sliced-design` skill
 - A new reusable feature or business object is requested, even without the
   words "feature" or "entity".
 - Several routes need shared chrome (a sidebar, an auth card) → a layout.
+- A URL must answer data rather than render a screen → an API route.
 - The project needs API error handling or auth for the first time.
 - An existing slice needs a segment it does not have yet (state, requests,
   helpers, an error catalog).
@@ -50,6 +51,7 @@ Examples that all use this skill:
 - "add a settings screen" → `generate page settings`
 - "the dashboard should require login" → `generate page dashboard --auth`
 - "admin pages need a shared sidebar" → `generate layout admin`
+- "the app needs a health endpoint" → `generate api-route health`
 - "loans need to be reusable across screens" → `generate slice entities loan`
 - "show a real message when saving fails" → `add error-handling`, then
   `--errors` on the slice that owns the failing call
@@ -86,6 +88,7 @@ anything.
 nextjs-fsd generate page <name> [--route <path>] [--no-route] [--client] [--auth] [--errors] [--defaults]
 nextjs-fsd generate slice <features|entities|widgets> <name> [--segments ui,model,api,lib] [--errors] [--defaults]
 nextjs-fsd generate layout <name> [--route <path>] [--no-route] [--defaults]
+nextjs-fsd generate api-route <name> [--route <path>] [--no-route] [--defaults]
 nextjs-fsd add error-handling [-y] [--no-install]
 nextjs-fsd add auth [-y] [--no-install]
 nextjs-fsd add prettier [-y] [--no-install]
@@ -145,6 +148,11 @@ Breaking one of these is silent — the build passes and the app is wrong.
   `index.server.ts`, which is what the route imports. A Client Component
   importing the slice must never pull the server module into the client graph,
   which Next.js rejects at build time.
+- **A `route.ts` re-exports the handler as the HTTP method, nothing else.**
+  `export { getX as GET } from "{{alias}}/_app/api-routes"` — the work lives
+  in the segment, the file stays the URL mapping. `middleware.js` and
+  `instrumentation.js` stay at the project root for the same reason in
+  reverse: Next.js reads them there and nowhere else.
 - **Imports point downwards, and a slice is entered through its public API
   (`index.ts`, or `index.server.ts` for server-only modules).**
   `{{alias}}/features/x`, never `{{alias}}/features/x/ui/x`. Inside a slice the

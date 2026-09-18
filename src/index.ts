@@ -4,7 +4,7 @@ import pc from "picocolors";
 
 import { NO_TTY_MESSAGE, select } from "./prompts";
 import { initProject } from "./commands/init";
-import { generateLayout, generatePage, generateSlice } from "./commands/generate";
+import { generateApiRoute, generateLayout, generatePage, generateSlice } from "./commands/generate";
 import { addAuth, addErrorHandling, addPrettier } from "./commands/add";
 import { setProjectLocale, showProjectConfig } from "./commands/config";
 import { isProjectDir, readConfig } from "./utils/config";
@@ -68,10 +68,12 @@ async function runGenerateWizard(): Promise<void> {
       { name: "Page (a _pages slice plus its route file)", value: "page" },
       { name: "Slice (features / entities / widgets)", value: "slice" },
       { name: "Layout (shared chrome for a group of routes)", value: "layout" },
+      { name: "API route (logic in _app/api-routes plus its route.ts)", value: "api-route" },
     ],
   });
   if (target === "page") await generatePage(undefined, {});
   else if (target === "slice") await generateSlice(undefined, undefined, {});
+  else if (target === "api-route") await generateApiRoute(undefined, {});
   else await generateLayout(undefined, {});
 }
 
@@ -86,7 +88,6 @@ const generate = program
       fail(err);
     }
   });
-
 generate
   .command("page [name]")
   .alias("p")
@@ -153,6 +154,26 @@ generate
         route: noRoute ? undefined : opts.route,
         routeFile: noRoute ? false : undefined,
         guard: opts.guard,
+        defaults: opts.defaults,
+      });
+    } catch (err) {
+      fail(err);
+    }
+  });
+
+generate
+  .command("api-route [name]")
+  .alias("r")
+  .description("scaffold a Route Handler: the logic in _app/api-routes plus the route.ts that re-exports it as GET")
+  .option("--route <path>", 'where it is served; defaults to "api/<name>" (served at /api/<name>)')
+  .option("--no-route", "write the handler only, no route.ts")
+  .option("--defaults", "skip every question; route = api/<name>")
+  .action(async (name, opts) => {
+    try {
+      const noRoute = opts.route === false;
+      await generateApiRoute(name, {
+        route: noRoute ? undefined : opts.route,
+        routeFile: noRoute ? false : undefined,
         defaults: opts.defaults,
       });
     } catch (err) {
@@ -294,7 +315,7 @@ async function runTopMenu(): Promise<void> {
   const target = await select({
     message: "What do you want to do?",
     choices: [
-      { name: "Generate (a page or a features/entities slice)", value: "generate" },
+      { name: "Generate (a page, slice, layout or API route)", value: "generate" },
       { name: "Add (error handling / auth / prettier)", value: "add" },
       { name: "Show the project config", value: "config" },
     ],

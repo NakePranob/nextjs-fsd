@@ -44,7 +44,9 @@ bunx @nakedev/nextjs-fsd generate page dashboard
   written against the shape go-scaffold produces; see their sections below for
   what to change if yours differs.
 
-The legacy `pages/` router is not supported.
+The legacy `pages/` router is not supported. The FSD guide covers it, but every
+generator here targets the App Router — route files, layouts and handlers are
+all App Router shapes.
 
 ## Quick start
 
@@ -119,10 +121,11 @@ anything, and names every missing flag at once instead of failing on the first.
 | Command | Purpose | Alias |
 |---|---|---|
 | init | Shape an existing App Router project into FSD layers | — |
-| generate | Open the page/slice/layout wizard | g |
+| generate | Open the page/slice/layout/API-route wizard | g |
 | generate page [name] | Add a `_pages` slice and its route file | g p |
 | generate slice [layer] [name] | Add a features/entities/widgets slice | g s |
 | generate layout [name] | Add shared chrome for a group of routes | g l |
+| generate api-route [name] | Add a Route Handler in `_app/api-routes` and its `route.ts` | g r |
 | add | Open the infrastructure wizard | — |
 | add error-handling | Add `shared/api`: error type, catalogs, client | add errors |
 | add auth | Add `shared/auth` and a login page | — |
@@ -380,6 +383,44 @@ the URL.
 The component takes a plain `{ children }` rather than `LayoutProps<…>`, since
 Next emits no route-props type for a route group.
 
+## generate api-route [name] — a Route Handler with its logic in `_app`
+
+~~~bash
+nextjs-fsd generate api-route health                 # served at /api/health
+nextjs-fsd generate api-route health --route v1/health
+nextjs-fsd generate api-route health --no-route      # logic only, serve it later
+nextjs-fsd g r health --defaults
+~~~
+
+### Options
+
+| Option | Effect |
+|---|---|
+| --route \<path\> | Where it is served; defaults to `api/<name>` (served at `/api/<name>`) |
+| --no-route | Write the handler only, no `route.ts` |
+| --defaults | Skip every question: route = `api/<name>` |
+
+### What it generates
+
+~~~text
+src/_app/api-routes/health.ts       # the handler logic (getHealth)
+src/_app/api-routes/index.ts        # public API of the api-routes segment
+app/api/health/route.ts             # re-exports it as GET, nothing else
+~~~
+
+The route file names the HTTP method, the logic module names the function:
+`export { getHealth as GET } from "@/_app/api-routes"`. Next.js maps the URL
+to the file, so the file stays a re-export and the work lives in the segment —
+where it can be imported and tested without a request. To serve another method
+from the same URL, export it from the same logic module and add it to the
+route file. One handler may answer two URLs (`--route v1/health` on an
+existing handler), but only when asked — re-running otherwise reports it is
+already served and writes nothing.
+
+Handlers live in `_app`, not `_pages`: a handler is not one route's content,
+it is backend composition shared the way a layout is, and cross-route
+composition is the app layer's job.
+
 ## Re-running a generate command extends it
 
 Nothing is ever overwritten. Re-running a command on something that exists
@@ -616,6 +657,7 @@ app/                                   # Next.js App Router — routing only
 src/
 ├── _app/                              # FSD app layer
 │   ├── layouts/                       # shells shared by a group of routes
+│   ├── api-routes/                    # Route Handler logic, re-exported as GET from app/api/
 │   ├── providers/                     # QueryClientProvider and friends
 │   └── styles/globals.css             # Tailwind @theme + @source
 ├── _pages/<page>/                     # one slice per route

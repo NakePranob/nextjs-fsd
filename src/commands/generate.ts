@@ -614,3 +614,131 @@ export async function generateLayout(rawName: string | undefined, opts: LayoutOp
     );
   }
 }
+
+export interface ApiRouteOptions {
+  route?: string;
+  /** false when --no-route was passed; commander leaves it undefined otherwise. */
+  routeFile?: boolean;
+  defaults?: boolean;
+}
+
+/**
+ * A Route Handler: the logic in `_app/api-routes` plus the `route.ts` that
+ * serves it.
+ *
+ * `_app`, not `_pages`: a handler is not one route's content, it is backend
+ * composition shared the way a layout is, and Next.js maps the URL to the
+ * file — so the file stays a re-export (`export { getX as GET }`) and the
+ * work lives in the segment, where it can be imported, tested and reused
+ * without a request.
+ *
+ * The default route mirrors the segment: `api/<name>`, served at
+ * `/api/<name>` from `<appDir>/api/<name>/route.ts`.
+ */
+export async function generateApiRoute(rawName: string | undefined, opts: ApiRouteOptions): Promise<void> {
+  const config = readConfig(process.cwd());
+  assertInputs("api-route", rawName, opts);
+
+  const name =
+    rawName ??
+    (await input({
+      message: `API route name (kebab-case, becomes ${config.srcDir}/_app/api-routes/<name>.ts):`,
+      validate: validateSliceName,
+    }));
+  const naming = resolveNaming(name);
+  // The logic module names the function; the route file names the method.
+  const handler = `get${naming.pascal}`;
+
+  const route = opts.route === undefined ? `api/${naming.name}` : normalizeRoute(opts.route);
+  const routeCheck = validateRoute(route);
+  if (routeCheck !== true) throw new Error(routeCheck);
+
+  const routeFile =
+    opts.routeFile ??
+    (rawName === undefined && !opts.defaults
+      ? await confirm({
+          message: "Create the App Router route.ts too?",
+          default: true,
+        })
+      : true);
+
+  const apiRoutes = `${config.srcDir}/_app/api-routes`;
+  // Same rule as page and layout: an existing handler is being extended
+  // (served from somewhere else), not recreated.
+  const extending = fs.existsSync(path.join(process.cwd(), `${apiRoutes}/${naming.name}.ts`));
+  const existingRoute = extending ? findApiRouteFor(process.cwd(), config.appDir, handler) : undefined;
+
+  const routePath = path.posix.join(config.appDir, route, "route.ts");
+  // Like a layout applied to a second path, one handler may answer two URLs —
+  // but only when asked: an explicit --route pointing somewhere new.
+  const serveElsewhere = opts.route !== undefined && existingRoute !== undefined && routePath !== existingRoute;
+
+  // Route groups contribute nothing to the URL, so printing the path verbatim
+  // would name a URL that never exists.
+  const routeUrl = route
+    .split("/")
+    .filter((segment) => !segment.startsWith("(") && !segment.startsWith("@"))
+    .join("/");
+  const context = { ...naming, ...config, copy: copyFor(config.locale), handler, routeUrl };
+
+  const written = await applyTemplates(
+    process.cwd(),
+    [
+      { template: "generate/api-route/handler.ts.hbs", output: `${apiRoutes}/${naming.name}.ts` },
+      {
+        template: "generate/api-route/route.ts.hbs",
+        output: routePath,
+        when: () => routeFile && (existingRoute === undefined || serveElsewhere),
+      },
+    ],
+    context,
+    { skipExisting: extending }
+  );
+
+  if (extending && written.length === 0) {
+    const where =
+      existingRoute !== undefined
+        ? `already exists and is already served from ${existingRoute}`
+        : "already has everything this would write";
+    throw new Error(
+      `${apiRoutes}/${naming.name}.ts ${where}.\nPass --route <path> to serve it from somewhere else as well.`
+    );
+  }
+
+  if (appendExport(process.cwd(), `${apiRoutes}/index.ts`, `export { ${handler} } from "./${naming.name}";`)) {
+    written.push(`${apiRoutes}/index.ts`);
+  }
+  await formatFiles(process.cwd(), [`${apiRoutes}/index.ts`]);
+
+  report(written);
+  if (extending) console.log(pc.dim(`\nextended the existing ${naming.name} handler; untouched files were left alone.`));
+  if (existingRoute !== undefined && !serveElsewhere) {
+    console.log(pc.dim(`\nalready served from ${existingRoute} — left alone rather than giving one handler a second URL.`));
+  } else if (!routeFile) {
+    console.log(pc.yellow("\nno route file — add a route.ts that re-exports the handler as GET when you want it served."));
+  } else {
+    console.log(`\n${pc.bold("Serves:")} /${routeUrl}`);
+  }
+}
+
+/**
+ * The route.ts that already serves this handler, if any.
+ *
+ * Found by reading the app directory rather than by guessing the path: a
+ * handler generated with `--route "v1/health"` lives nowhere the name would
+ * predict, and the whole point is to notice a route that is not where the
+ * default would have put it.
+ */
+function findApiRouteFor(projectDir: string, appDir: string, handler: string): string | undefined {
+  const root = path.join(projectDir, appDir);
+  if (!fs.existsSync(root)) return undefined;
+  const marker = `${handler} as GET`;
+  for (const entry of fs.readdirSync(root, { recursive: true, encoding: "utf8" })) {
+    if (path.basename(entry) !== "route.ts") continue;
+    const file = path.join(root, entry);
+    if (fs.readFileSync(file, "utf8").includes(marker)) {
+      return path.posix.join(appDir, entry.split(path.sep).join("/"));
+    }
+  }
+  return undefined;
+}

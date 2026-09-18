@@ -506,6 +506,31 @@ check("--guard is refused without auth", () => {
   );
 });
 
+cli(a, ["generate", "api-route", "health", "--defaults"]);
+check("an api route lands in _app/api-routes with a route.ts that serves it", () =>
+  assertFiles(a, ["src/_app/api-routes/health.ts", "src/_app/api-routes/index.ts", "app/api/health/route.ts"])
+);
+check("the route.ts is a re-export and the barrel carries the handler", () => {
+  assert.match(read(a, "app/api/health/route.ts"), /export \{ getHealth as GET \} from "@\/_app\/api-routes";/);
+  assert.match(read(a, "src/_app/api-routes/index.ts"), /export \{ getHealth \} from "\.\/health";/);
+  assert.match(read(a, "src/_app/api-routes/health.ts"), /export async function getHealth/);
+});
+check("re-running an api route adds nothing and says so", () =>
+  assert.match(
+    cliFails(a, ["generate", "api-route", "health", "--defaults"]),
+    /already served from app\/api\/health\/route\.ts/
+  )
+);
+check("one handler can serve a second URL when asked", () => {
+  const output = cli(a, ["generate", "api-route", "health", "--route", "v1/health", "--defaults"]);
+  assert.ok(has(a, "app/v1/health/route.ts"), "the second route was not written");
+  assert.match(output, /Serves: \/v1\/health/);
+  assert.match(
+    cliFails(a, ["generate", "api-route", "health", "--route", "v1/health", "--defaults"]),
+    /already served from/
+  );
+});
+
 // -------------------------------------------------------------- src/app/ + en
 
 console.log("\nsrc/app/ layout, English copy");

@@ -11,8 +11,8 @@
 ├── layout.tsx               # composition root: fonts, <Providers>, global CSS
 └── <route>/page.tsx         # re-exports an FSD page + its metadata, nothing else
 {{srcDir}}/
-├── _app/                    # FSD app layer — providers/, styles/
-├── _pages/<page>/           # one slice per route: ui/, index.ts (public API)
+├── _app/                    # FSD app layer — providers/, styles/, layouts/, api-routes/
+├── _pages/<page>/           # one slice per route: ui/, index.ts (+ index.server.ts with a leaf)
 ├── features/<slice>/        # a whole user action, once two pages need it
 ├── entities/<slice>/        # a business object, once two features need it
 └── shared/                  # infrastructure only — api/, auth/, config/, lib/, ui/
@@ -234,6 +234,7 @@ trip rather than correctness.
 nextjs-fsd generate page <name>            # slice + {{appDir}}/<name>/page.tsx
 nextjs-fsd generate slice features <name>  # a feature slice
 nextjs-fsd generate layout admin           # _app/layouts + {{appDir}}/(admin)/layout.tsx
+nextjs-fsd generate api-route health       # _app/api-routes + {{appDir}}/api/health/route.ts
 nextjs-fsd add error-handling              # shared/api: ApiError, catalogs, client
 nextjs-fsd add auth                        # shared/auth: session, guard, login page
 ```
@@ -243,6 +244,22 @@ Re-running a generate command extends what is there instead of refusing, so
 never rewrites one you already have — and it will not add a second route file
 for a page that is already routed from somewhere else, because two `page.tsx`
 resolving to the same URL is a Next.js build error.
+
+Route handlers live in `_app/api-routes`, not `_pages`: a handler is not one
+route's content, it is backend composition shared the way a layout is.
+`{{appDir}}/api/<name>/route.ts` re-exports the logic as the HTTP method
+(`export { getHealth as GET }`) and does nothing else — Next.js maps the URL
+to the file, so the file stays the mapping and the work stays in the segment.
+
+Some files stay at the project root because Next.js reads them there and
+nowhere else: `middleware.js`, `instrumentation.js`. `init` never moves them,
+and nothing generated imports them — they are routing concerns, not slices.
+The legacy `pages/` router is out of scope for the same reason in reverse:
+every generator here emits App Router shapes, so a `pages/` tree would be a
+second routing layer no command knows how to extend. Database access goes in
+`shared/db/` when it appears, next to nothing: queries and the caching around
+them live in the same place, the way `shared/api` keeps the client next to
+its QueryClient.
 
 Layouts live in `_app/layouts`, not `_pages`: a layout is not one route's
 content, it is what several routes have in common, and `{{appDir}}/(group)/layout.tsx`
