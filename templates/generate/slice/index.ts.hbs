@@ -10,6 +10,9 @@ export { {{camel}}Key, useCreate{{pascal}}, use{{pascal}}Query, type {{pascal}}R
 {{#if segments.lib}}
 export { format{{pascal}} } from "./lib/{{name}}";
 {{/if}}
+{{#if segments.config}}
+export { {{camel}}Config } from "./config/{{name}}";
+{{/if}}
 {{#if segments.errors}}
 export { {{camel}}ErrorCatalog, {{camel}}ErrorCatalogs, resolve{{pascal}}Error } from "./model/{{name}}-errors";
 {{/if}}

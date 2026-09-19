@@ -8,8 +8,9 @@ import boundary, the segment rules, and why `{{appDir}}/` only ever re-exports.
 
 Rules that are easy to break without noticing:
 
-- imports point downwards only, and a slice is imported through its `index.ts`
-- `{{appDir}}/<route>/page.tsx` re-exports the FSD page **and its `metadata`** — nothing else
+- imports point downwards only, and a slice is imported through its public API (`index.ts`, or `index.server.ts` for server-only modules)
+- `{{appDir}}/<route>/page.tsx` re-exports the FSD page **and its `metadata`** — nothing else (from `<slice>/index.server` when the page has a client leaf)
+- `{{appDir}}/api/<name>/route.ts` re-exports the handler as the HTTP method (`export { getX as GET }` from `{{srcDir}}/_app/api-routes`) — nothing else; `middleware.js`/`instrumentation.js` stay at the project root
 - `"use client"` goes on the leaf that needs it, not on the page
 - `{{lintCommand}}` runs both linters: ESLint (`eslint.fsd.mjs`) flags a wrong-way or slice-internal import per file as you type, steiger (`steiger.config.ts`) flags the same imports plus what one file cannot show — a slice with no consumers, a layer sliced too finely
 - editing `eslint.fsd.mjs`: flat config replaces a rule's options when a later block matches the same file, so all of a layer's `no-restricted-imports` patterns must stay in that layer's one block
@@ -19,7 +20,13 @@ the repository root, symlinked from `.claude/skills/nextjs-fsd`, which carries
 the same contract in the form they read first. `docs/fsd.md` is the source of
 truth if the two disagree.
 
-Scaffold with `nextjs-fsd generate page|slice|layout` rather than by hand, so
+Two agent skills sit in the repository root, both symlinked from `.claude/skills/`:
+
+- `.agents/skills/nextjs-fsd/` — driving the generator in this repo
+- `.agents/skills/feature-sliced-design/` — the FSD methodology itself, for the
+  "should this be an entity at all" questions
+
+Scaffold with `nextjs-fsd generate page|slice|layout|api-route` rather than by hand, so
 slices keep the same shape. Re-running one extends what exists (adds a
 segment, a leaf, an error catalog) and never rewrites a file you already have.
 `shadcn add <name>` is already aimed at `{{srcDir}}/shared/ui` by

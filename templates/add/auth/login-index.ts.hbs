@@ -1,1 +1,5 @@
-export { LoginPage, metadata } from "./ui/login-page";
+// The client-safe half of this slice's public API. The server component and
+// its metadata live in index.server.ts: any Client Component importing this
+// slice would otherwise pull the server module into the client graph, which
+// Next.js rejects at build time.
+export { LoginForm } from "./ui/login-form";

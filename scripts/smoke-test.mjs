@@ -29,7 +29,7 @@ function check(label, fn) {
 }
 
 /** The parts of a create-next-app@16 project that init and add actually read. */
-function fixture(dir, { srcApp = false, lockfile } = {}) {
+function fixture(dir, { srcApp = false, lockfile, vitest = false } = {}) {
   const appDir = srcApp ? path.join(dir, "src", "app") : path.join(dir, "app");
   fs.mkdirSync(appDir, { recursive: true });
   fs.writeFileSync(
@@ -40,7 +40,9 @@ function fixture(dir, { srcApp = false, lockfile } = {}) {
         private: true,
         scripts: { dev: "next dev", lint: "eslint" },
         dependencies: { next: "16.3.4", react: "19.2.8", "react-dom": "19.2.8" },
-        devDependencies: { typescript: "^5" },
+        // vitest here is never installed — the CLI only reads package.json to
+        // decide whether the generated tests import from it or from bun:test.
+        devDependencies: { typescript: "^5", ...(vitest ? { vitest: "^3" } : {}) },
       },
       null,
       2
@@ -248,9 +250,25 @@ check("init writes the layer, linter, shadcn and agent files", () =>
     "components.json",
     "docs/fsd.md",
     ".agents/skills/nextjs-fsd/SKILL.md",
+    ".agents/skills/feature-sliced-design/SKILL.md",
     "AGENTS.md",
     "nextjs-fsd.config.json",
   ])
+);
+check("the FSD methodology skill ships with its references", () => {
+  assertFiles(a, [".agents/skills/feature-sliced-design/references/framework-integration.md"]);
+  assert.match(
+    read(a, ".agents/skills/feature-sliced-design/references/framework-integration.md"),
+    /## Next\.js/
+  );
+});
+check("the methodology skill is copied verbatim, never rendered", () =>
+  // Handlebars would read this Vue example as an expression and render it to
+  // nothing — a doc that silently loses the line it was demonstrating.
+  assert.match(
+    read(a, ".agents/skills/feature-sliced-design/references/cross-import-patterns.md"),
+    /{{ comment\.text }}/
+  )
 );
 check("the skill carries frontmatter and defers FSD theory to the FSD skill", () => {
   const skill = read(a, ".agents/skills/nextjs-fsd/SKILL.md");
@@ -320,11 +338,18 @@ check("add auth pulls in error handling first", () =>
     "src/shared/auth/session.ts",
     "src/shared/ui/form-error.tsx",
     "src/_app/providers/index.tsx",
+    "src/_pages/login/index.ts",
+    "src/_pages/login/index.server.ts",
     "src/_pages/login/ui/login-form.tsx",
     "app/login/page.tsx",
     ".env.example",
   ])
 );
+check("the login slice splits its public API like a generated page with a leaf", () => {
+  assert.match(read(a, "src/_pages/login/index.ts"), /export \{ LoginForm \}/);
+  assert.match(read(a, "src/_pages/login/index.server.ts"), /export \{ LoginPage, metadata \}/);
+  assert.match(read(a, "app/login/page.tsx"), /from "@\/_pages\/login\/index\.server";/);
+});
 check("<Providers> wraps the JSX children, not the destructured parameter", () => {
   const layout = read(a, "app/layout.tsx");
   assert.match(layout, /RootLayout\(\{ children \}: LayoutProps<"\/">\)/);
@@ -357,6 +382,7 @@ cli(a, ["generate", "page", "dashboard", "--auth", "--errors", "--route", "(admi
 check("a page slice, its leaf, its catalog and its route file", () =>
   assertFiles(a, [
     "src/_pages/dashboard/index.ts",
+    "src/_pages/dashboard/index.server.ts",
     "src/_pages/dashboard/ui/dashboard-page.tsx",
     "src/_pages/dashboard/ui/dashboard-content.tsx",
     "src/_pages/dashboard/model/dashboard-errors.ts",
@@ -364,8 +390,29 @@ check("a page slice, its leaf, its catalog and its route file", () =>
   ])
 );
 check("the route file re-exports metadata too, not just default", () =>
-  assert.match(read(a, "app/(admin)/dashboard/page.tsx"), /export \{ DashboardPage as default, metadata \}/)
+  assert.match(
+    read(a, "app/(admin)/dashboard/page.tsx"),
+    /export \{ DashboardPage as default, metadata \} from "@\/_pages\/dashboard\/index\.server";/
+  )
 );
+check("a page with a client leaf splits its public API in two", () => {
+  // index.ts is the client-safe half: any Client Component importing the slice
+  // must not pull the server component into the client graph.
+  assert.match(read(a, "src/_pages/dashboard/index.ts"), /export \{ DashboardContent \}/);
+  assert.doesNotMatch(read(a, "src/_pages/dashboard/index.ts"), /DashboardPage/);
+  assert.doesNotMatch(read(a, "src/_pages/dashboard/index.ts"), /^export \{[^}]*metadata/m);
+  // index.server.ts is the server-only half the route file imports.
+  assert.match(
+    read(a, "src/_pages/dashboard/index.server.ts"),
+    /export \{ DashboardPage, metadata \} from "\.\/ui\/dashboard-page";/
+  );
+});
+check("a server-only page keeps the single-entry public API", () => {
+  cli(a, ["generate", "page", "plain", "--defaults"]);
+  assert.match(read(a, "src/_pages/plain/index.ts"), /export \{ PlainPage, metadata \}/);
+  assert.match(read(a, "app/plain/page.tsx"), /from "@\/_pages\/plain";/);
+  assert.ok(!has(a, "src/_pages/plain/index.server.ts"), "a server-only page needs no index.server.ts");
+});
 check("--auth puts the guard on the client leaf, not the page", () => {
   assert.match(read(a, "src/_pages/dashboard/ui/dashboard-content.tsx"), /"use client";[\s\S]*useRequireSession/);
   // The page's comment mentions "use client"; only a leading directive counts.
@@ -384,6 +431,8 @@ check("extending a page routed from a group does not add a second route file", (
   const output = cli(a, ["generate", "page", "settings", "--client", "--defaults"]);
   assert.match(output, /already routed from app\/\(admin\)\/settings\/page\.tsx/);
   assert.ok(has(a, "src/_pages/settings/ui/settings-content.tsx"), "the new leaf was not written");
+  assert.ok(has(a, "src/_pages/settings/index.server.ts"), "the server-only entry was not written");
+  assert.match(output, /finish the split by hand/);
   assert.ok(!has(a, "app/settings/page.tsx"), "a duplicate route was written");
   assert.ok(!has(a, "app/dashboard/page.tsx"), "a duplicate route was written");
 });
@@ -397,6 +446,50 @@ check("a slice gets only the segments asked for", () => {
 cli(a, ["generate", "slice", "features", "loan-application", "--segments", "ui,model,api", "--defaults"]);
 check("a segment can be added to a slice that already exists", () =>
   assertFiles(a, ["src/features/loan-application/model/loan-application.ts", "src/features/loan-application/api/loan-application.ts"])
+);
+
+cli(a, ["generate", "slice", "features", "loan-application", "--segments", "config", "--defaults"]);
+check("a config segment carries the slice's flags and joins the public API", () => {
+  assertFiles(a, ["src/features/loan-application/config/loan-application.ts"]);
+  assert.match(
+    read(a, "src/features/loan-application/index.ts"),
+    /export \{ loanApplicationConfig \} from "\.\/config\/loan-application";/
+  );
+});
+
+cli(a, ["generate", "page", "alpha", "beta", "--defaults"]);
+check("several pages generate in one command, each routed by its own name", () =>
+  assertFiles(a, ["src/_pages/alpha/index.ts", "app/alpha/page.tsx", "src/_pages/beta/index.ts", "app/beta/page.tsx"])
+);
+check("--route with several pages is refused instead of guessing", () =>
+  assert.match(cliFails(a, ["generate", "page", "alpha", "beta", "--route", "x", "--defaults"]), /only one page/)
+);
+
+cli(a, ["generate", "slice", "f", "employee/employee-record", "--segments", "ui,config", "--defaults"]);
+check("a slice group nests under its group, files named for the slice", () => {
+  assertFiles(a, [
+    "src/features/employee/employee-record/index.ts",
+    "src/features/employee/employee-record/ui/employee-record.tsx",
+    "src/features/employee/employee-record/config/employee-record.ts",
+  ]);
+  assert.match(
+    read(a, "src/features/employee/employee-record/index.ts"),
+    /export \{ EmployeeRecord \} from "\.\/ui\/employee-record";/
+  );
+});
+
+cli(a, ["generate", "slice", "entities", "ledger-account", "-r", "src/domain", "--segments", "ui", "--defaults"]);
+cli(a, ["generate", "page", "vault", "--root", "src/domain", "--defaults"]);
+check("--root puts slices under another FSD root with matching imports", () => {
+  assertFiles(a, [
+    "src/domain/entities/ledger-account/index.ts",
+    "src/domain/_pages/vault/index.ts",
+    "app/vault/page.tsx",
+  ]);
+  assert.match(read(a, "app/vault/page.tsx"), /from "@\/domain\/_pages\/vault";/);
+});
+check("--root outside src/ is refused instead of writing unresolvable imports", () =>
+  assert.match(cliFails(a, ["generate", "slice", "entities", "x", "-r", "other", "--defaults"]), /must stay inside src/)
 );
 check("index.ts gains the new exports and keeps the old one", () => {
   const barrel = read(a, "src/features/loan-application/index.ts");
@@ -458,20 +551,53 @@ check("a page that would guard itself under a guarded shell is told", () =>
   )
 );
 cli(a, ["generate", "page", "invoices", "--model", "--defaults"]);
-check("--model gives a page its query hooks, and keeps them inside the slice", () => {
-  const model = read(a, "src/_pages/invoices/model/invoices.ts");
-  assert.match(model, /export const invoicesKey = \["invoices"\] as const;/);
-  assert.match(model, /invalidateQueries\(\{ queryKey: invoicesKey \}\)/);
+check("--model is a legacy alias for --api, and both land in api/", () => {
+  const api = read(a, "src/_pages/invoices/api/invoices.ts");
+  assert.match(api, /export const invoicesKey = \["invoices"\] as const;/);
+  assert.match(api, /invalidateQueries\(\{ queryKey: invoicesKey \}\)/);
+  assert.ok(!has(a, "src/_pages/invoices/model/invoices.ts"), "query hooks do not belong in model/");
   // The public API of a page is the page. Hooks are the slice's own business,
   // imported relatively from its ui/.
   assert.doesNotMatch(read(a, "src/_pages/invoices/index.ts"), /invoicesKey/);
 });
+cli(a, ["generate", "page", "ledger", "--api", "--defaults"]);
+check("--api gives a page its query hooks in api/", () =>
+  assertFiles(a, ["src/_pages/ledger/api/ledger.ts"])
+);
 check("--guard is refused without auth", () => {
   const bare = fixture(path.join(root, "guard-bare"));
   cli(bare, ["init", "--no-install", "--defaults"]);
   assert.match(
     cliFails(bare, ["generate", "layout", "admin", "--guard", "--defaults"]),
     /needs the auth feature/
+  );
+});
+
+cli(a, ["generate", "api-route", "health", "--defaults"]);
+check("an api route lands in _app/api-routes with a route.ts that serves it", () =>
+  assertFiles(a, ["src/_app/api-routes/health.ts", "src/_app/api-routes/index.ts", "app/api/health/route.ts"])
+);
+check("the route.ts is a re-export and the barrel carries the handler", () => {
+  assert.match(read(a, "app/api/health/route.ts"), /export \{ getHealth as GET \} from "@\/_app\/api-routes";/);
+  assert.match(read(a, "src/_app/api-routes/index.ts"), /export \{ getHealth \} from "\.\/health";/);
+  assert.match(read(a, "src/_app/api-routes/health.ts"), /export async function getHealth/);
+});
+check("re-running an api route adds nothing and says so", () =>
+  assert.match(
+    cliFails(a, ["generate", "api-route", "health", "--defaults"]),
+    /already served from app\/api\/health\/route\.ts/
+  )
+);
+check("one handler can serve a second URL when asked", () => {
+  const output = cli(a, ["generate", "api-route", "health", "--route", "v1/health", "--defaults"]);
+  assert.ok(has(a, "app/v1/health/route.ts"), "the second route was not written");
+  // "Serves:" alone: the word is wrapped in bold codes, so a regex spanning
+  // into the URL would only match where colors are off. The file existing
+  // above plus this branch label is the assertion.
+  assert.match(output, /Serves:/);
+  assert.match(
+    cliFails(a, ["generate", "api-route", "health", "--route", "v1/health", "--defaults"]),
+    /already served from/
   );
 });
 
@@ -504,6 +630,12 @@ console.log("\nbun project");
 const c = fixture(path.join(root, "c"), { lockfile: "bun" });
 cli(c, ["init", "--no-install", "--defaults"]);
 cli(c, ["add", "error-handling", "--no-install", "-y"]);
+check("error handling leaves shared/auth with a public API, not a lone file", () => {
+  // A segment holding one file and no index.ts is a steiger error — and `add
+  // auth` may not run for months. The export is appended, so a project with
+  // its own index.ts keeps it.
+  assert.match(read(c, "src/shared/auth/index.ts"), /export \{ getAccessToken, setAccessToken \}/);
+});
 check("a bun project gets the refresh test and the types it needs to compile", () => {
   // Nothing else covers this template: the package manager is read from the
   // lockfile, so the npm-shaped fixtures above never generate it — and this is
@@ -526,6 +658,12 @@ check("a bun project gets the ?next= guard test too", () => {
   // test template is written at all — and the only place tsc sees it.
   assert.match(read(c, "src/shared/auth/require-session.test.ts"), /from "bun:test"/);
   assert.match(read(c, "src/shared/auth/require-session.test.ts"), /safeNext/);
+  // Installed error handling first, so the access-token line was appended —
+  // and installing auth on top kept it instead of duplicating it.
+  const barrel = read(c, "src/shared/auth/index.ts");
+  assert.match(barrel, /export \{ getAccessToken, setAccessToken \}/);
+  assert.match(barrel, /export \{ sessionKey, useLogin, useLogout, useSession/);
+  assert.equal(barrel.match(/from "\.\/access-token"/g).length, 1);
 });
 check("the login form picks ?next= back up instead of always landing home", () =>
   assert.match(read(c, "src/_pages/login/ui/login-form.tsx"), /router\.replace\(safeNext\(/)
@@ -556,6 +694,25 @@ check("a 401 from anywhere resets the session entry rather than removing it", ()
   // key has to live here and be imported back, never the other way round.
   // The prose above it says so; only an import would be the bug.
   assert.doesNotMatch(queryClient, /^import .*shared\/auth/m);
+});
+
+// ---------------------------------------------------------------- vitest shape
+
+console.log("\nvitest project");
+const v = fixture(path.join(root, "v"), { vitest: true });
+cli(v, ["init", "--no-install", "--defaults"]);
+cli(v, ["add", "error-handling", "--no-install", "-y"]);
+check("a vitest project gets the refresh test with vitest imports", () => {
+  // No bun lockfile, so this is the only place the vitest rendering is
+  // exercised — and it is rendering only: vitest is declared but never
+  // installed here, so no typecheck runs over this fixture.
+  assert.match(read(v, "src/shared/api/client.test.ts"), /from "vitest"/);
+  assert.ok(!JSON.parse(read(v, "package.json")).devDependencies?.["@types/bun"]);
+});
+cli(v, ["add", "auth", "--no-install", "-y"]);
+check("a vitest project gets the ?next= guard test with vitest imports", () => {
+  assert.match(read(v, "src/shared/auth/require-session.test.ts"), /from "vitest"/);
+  assert.match(read(v, "src/shared/auth/require-session.test.ts"), /safeNext/);
 });
 
 // ------------------------------------------------------------------- hooks
@@ -735,6 +892,12 @@ check("no template variable survived into any generated file", () => {
           const body = fs.readFileSync(full, "utf8");
           // `{{` never legitimately appears in the output: JSX uses one brace,
           // and no generated file writes a handlebars expression on purpose.
+          // Only the methodology skill is exempt — it is copied byte-for-byte,
+          // Vue examples and all. `.claude/` holds the symlinked copy of both
+          // skills, so it is skipped too.
+          const relative = path.relative(dir, full).split(path.sep).join("/");
+          if (relative.includes("skills/feature-sliced-design/")) continue;
+          if (relative.startsWith(".claude/")) continue;
           if (body.includes("{{")) leaks.push(path.relative(dir, full));
         }
       }

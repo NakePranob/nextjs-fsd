@@ -11,8 +11,8 @@
 ├── layout.tsx               # composition root: fonts, <Providers>, global CSS
 └── <route>/page.tsx         # re-exports an FSD page + its metadata, nothing else
 {{srcDir}}/
-├── _app/                    # FSD app layer — providers/, styles/
-├── _pages/<page>/           # one slice per route: ui/, index.ts (public API)
+├── _app/                    # FSD app layer — providers/, styles/, layouts/, api-routes/
+├── _pages/<page>/           # one slice per route: ui/, index.ts (+ index.server.ts with a leaf)
 ├── features/<slice>/        # a whole user action, once two pages need it
 ├── entities/<slice>/        # a business object, once two features need it
 └── shared/                  # infrastructure only — api/, auth/, config/, lib/, ui/
@@ -117,17 +117,24 @@ A route file re-exports an FSD page and nothing else:
 
 ```tsx
 // {{appDir}}/login/page.tsx
-export { LoginPage as default, metadata } from "{{alias}}/_pages/login";
+export { LoginPage as default, metadata } from "{{alias}}/_pages/login/index.server";
 ```
 
 Export `metadata` alongside the component — a route file that only
 re-exports `default` silently drops the page's title.
 
+The login page renders a client form, so its route imports from the
+server-only entry: `index.server.ts` carries the page and its `metadata`,
+while `index.ts` carries only the client-safe leaf. A server-only page has no
+split — its route imports from the slice root. Either way a Client Component
+importing the slice must never pull the server module into the client graph,
+which Next.js rejects at build time.
+
 ## Segments
 
 A slice gets only the segments it has code for. `ui/` alone is the common
-case; add `model/` (state, hooks), `api/` (requests) or `lib/` (helpers) when
-that slice actually has them. An empty segment folder is noise.
+case; add `model/` (state, hooks), `api/` (requests), `lib/` (helpers) or
+`config/` (flags and settings) when that slice actually has them. An empty segment folder is noise.
 
 Adding one later is the normal path, not a rewrite — re-run the same command
 with the extra segment and it writes only what is missing, appending the new
@@ -142,7 +149,8 @@ nextjs-fsd generate slice features checkout --segments ui,model  # adds model/
 {{srcDir}}/_pages/<page>/
 ├── ui/<page>-page.tsx  # server component + `metadata`
 ├── ui/<thing>.tsx      # "use client" only on the leaves that need it
-└── index.ts            # public API — the only thing {{appDir}}/ imports
+├── index.ts            # client-safe public API (the leaf) — or the page, when server-only
+└── index.server.ts     # with a leaf: the page + `metadata`, which is what {{appDir}}/ imports
 ```
 
 ## Server vs. client components
@@ -224,17 +232,41 @@ trip rather than correctness.
 
 ```bash
 nextjs-fsd generate page <name>            # slice + {{appDir}}/<name>/page.tsx
+nextjs-fsd generate page <a> <b>           # several at once, each routed by its own name
 nextjs-fsd generate slice features <name>  # a feature slice
+nextjs-fsd generate slice features employee/employee-record  # a slice group
 nextjs-fsd generate layout admin           # _app/layouts + {{appDir}}/(admin)/layout.tsx
+nextjs-fsd generate api-route health       # _app/api-routes + {{appDir}}/api/health/route.ts
 nextjs-fsd add error-handling              # shared/api: ApiError, catalogs, client
 nextjs-fsd add auth                        # shared/auth: session, guard, login page
 ```
+
+`--root` (short `-r`) aims a page or slice at another FSD root inside
+`{{srcDir}}/` instead, such as `{{srcDir}}/domain` — the generated imports
+follow it. A root outside `{{srcDir}}/` is refused: the `@` alias cannot
+resolve imports from there.
 
 Re-running a generate command extends what is there instead of refusing, so
 `--errors` or `--client` on a page built bare earlier just adds the file. It
 never rewrites one you already have — and it will not add a second route file
 for a page that is already routed from somewhere else, because two `page.tsx`
 resolving to the same URL is a Next.js build error.
+
+Route handlers live in `_app/api-routes`, not `_pages`: a handler is not one
+route's content, it is backend composition shared the way a layout is.
+`{{appDir}}/api/<name>/route.ts` re-exports the logic as the HTTP method
+(`export { getHealth as GET }`) and does nothing else — Next.js maps the URL
+to the file, so the file stays the mapping and the work stays in the segment.
+
+Some files stay at the project root because Next.js reads them there and
+nowhere else: `middleware.js`, `instrumentation.js`. `init` never moves them,
+and nothing generated imports them — they are routing concerns, not slices.
+The legacy `pages/` router is out of scope for the same reason in reverse:
+every generator here emits App Router shapes, so a `pages/` tree would be a
+second routing layer no command knows how to extend. Database access goes in
+`shared/db/` when it appears, next to nothing: queries and the caching around
+them live in the same place, the way `shared/api` keeps the client next to
+its QueryClient.
 
 Layouts live in `_app/layouts`, not `_pages`: a layout is not one route's
 content, it is what several routes have in common, and `{{appDir}}/(group)/layout.tsx`

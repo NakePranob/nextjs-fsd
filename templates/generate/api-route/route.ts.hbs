@@ -1,0 +1,6 @@
+// Routing only — the handler logic lives in the _app layer's api-routes
+// segment. Next.js requires this file to be named route.ts and the export to
+// be the HTTP method, so this file is both of those and nothing else. To serve
+// another method from the same URL, export it from the same logic module and
+// add it here (e.g. `export { createX as POST }`).
+export { {{handler}} as GET } from "{{alias}}/_app/api-routes";

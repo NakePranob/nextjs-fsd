@@ -1,0 +1,17 @@
+import { NextResponse } from "next/server";
+
+/**
+ * Logic for the GET handler served at /{{routeUrl}}. The route file
+ * ({{appDir}}/api/.../route.ts) re-exports this as GET and does nothing else:
+ * Next.js maps the URL to the file, and the work lives here in the _app
+ * layer's api-routes segment — a route handler is cross-route composition,
+ * not one page's content, so it is the app layer's job the way a shared
+ * layout is.
+ *
+ * TODO: replace with what this endpoint actually answers. A failure the app
+ * branches on travels as ApiError (shared/api) when the handler calls the
+ * API; anything else is a 500 with no body for a client to misread.
+ */
+export async function {{handler}}(): Promise<NextResponse> {
+  return NextResponse.json({ ok: true });
+}

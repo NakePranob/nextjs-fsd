@@ -4,7 +4,7 @@ import pc from "picocolors";
 
 import { NO_TTY_MESSAGE, select } from "./prompts";
 import { initProject } from "./commands/init";
-import { generateLayout, generatePage, generateSlice } from "./commands/generate";
+import { generateApiRoute, generateLayout, generatePage, generatePages, generateSlice, generateSlices } from "./commands/generate";
 import { addAuth, addErrorHandling, addPrettier } from "./commands/add";
 import { setProjectLocale, showProjectConfig } from "./commands/config";
 import { isProjectDir, readConfig } from "./utils/config";
@@ -39,6 +39,15 @@ program
   )
   .version(cliVersion());
 
+// runTopMenu is defined below; function declarations hoist, so this command
+// can reference it before its definition in the file.
+program
+  .command("wizard")
+  .description("pick what to do from a menu (same as running nextjs-fsd with no arguments)")
+  .action(() => {
+    runTopMenu().catch(fail);
+  });
+
 program
   .command("init")
   .description("shape an existing Next.js App Router project into FSD layers (run this once, after create-next-app)")
@@ -68,10 +77,12 @@ async function runGenerateWizard(): Promise<void> {
       { name: "Page (a _pages slice plus its route file)", value: "page" },
       { name: "Slice (features / entities / widgets)", value: "slice" },
       { name: "Layout (shared chrome for a group of routes)", value: "layout" },
+      { name: "API route (logic in _app/api-routes plus its route.ts)", value: "api-route" },
     ],
   });
   if (target === "page") await generatePage(undefined, {});
   else if (target === "slice") await generateSlice(undefined, undefined, {});
+  else if (target === "api-route") await generateApiRoute(undefined, {});
   else await generateLayout(undefined, {});
 }
 
@@ -86,30 +97,33 @@ const generate = program
       fail(err);
     }
   });
-
 generate
-  .command("page [name]")
+  .command("page [names...]")
   .alias("p")
-  .description("scaffold a _pages slice and the thin route file that re-exports it")
+  .description("scaffold _pages slices and the thin route files that re-export them")
   .option("--title <title>", "heading and browser title; defaults to the Title Case of the page name")
   .option("--route <path>", 'App Router path; defaults to the page name. Route groups and dynamic segments work: "(admin)/dashboard", "loans/[id]"')
   .option("--no-route", "write the slice only, no route file")
+  .option("-r, --root <dir>", "FSD root inside src/ (default src), e.g. -r src/domain")
   .option("--client", 'also create a "use client" leaf component')
   .option("--auth", "the client leaf sits behind useRequireSession (needs `add auth`)")
-  .option("--model", "add model/<name>.ts, this page's TanStack Query hooks (needs `add error-handling`)")
+  .option("--api", "add api/<name>.ts, this page's TanStack Query hooks (needs `add error-handling`)")
+  .option("--model", "legacy alias for --api")
   .option("--errors", "add model/<name>-errors.ts, this page's own error catalog (needs `add error-handling`)")
   .option("--defaults", "skip every question; server component only, route = the page name")
-  .action(async (name, opts) => {
+  .action(async (names, opts) => {
     try {
       // commander folds --no-route into the same `route` key: false when it
       // was passed, a string when --route was, undefined when neither.
       const noRoute = opts.route === false;
-      await generatePage(name, {
+      await generatePages(names, {
         title: opts.title,
         route: noRoute ? undefined : opts.route,
         routeFile: noRoute ? false : undefined,
+        root: opts.root,
         client: opts.client,
         auth: opts.auth,
+        api: opts.api,
         model: opts.model,
         errors: opts.errors,
         defaults: opts.defaults,
@@ -120,16 +134,18 @@ generate
   });
 
 generate
-  .command("slice [layer] [name]")
+  .command("slice [layer] [names...]")
   .alias("s")
-  .description("scaffold a features/entities/widgets slice with only the segments it needs")
-  .option("--segments <list>", "comma-separated: ui,model,api,lib (default ui)")
+  .description("scaffold features/entities/widgets slices with only the segments they need")
+  .option("--segments <list>", "comma-separated: ui,model,api,lib,config (default ui)")
+  .option("-r, --root <dir>", "FSD root inside src/ (default src), e.g. -r src/domain")
   .option("--errors", "add model/<name>-errors.ts, this slice's own error catalog (needs `add error-handling`)")
   .option("--defaults", "skip every question; ui segment only")
-  .action(async (layer, name, opts) => {
+  .action(async (layer, names, opts) => {
     try {
-      await generateSlice(layer, name, {
+      await generateSlices(layer, names, {
         segments: opts.segments,
+        root: opts.root,
         errors: opts.errors,
         defaults: opts.defaults,
       });
@@ -153,6 +169,26 @@ generate
         route: noRoute ? undefined : opts.route,
         routeFile: noRoute ? false : undefined,
         guard: opts.guard,
+        defaults: opts.defaults,
+      });
+    } catch (err) {
+      fail(err);
+    }
+  });
+
+generate
+  .command("api-route [name]")
+  .alias("r")
+  .description("scaffold a Route Handler: the logic in _app/api-routes plus the route.ts that re-exports it as GET")
+  .option("--route <path>", 'where it is served; defaults to "api/<name>" (served at /api/<name>)')
+  .option("--no-route", "write the handler only, no route.ts")
+  .option("--defaults", "skip every question; route = api/<name>")
+  .action(async (name, opts) => {
+    try {
+      const noRoute = opts.route === false;
+      await generateApiRoute(name, {
+        route: noRoute ? undefined : opts.route,
+        routeFile: noRoute ? false : undefined,
         defaults: opts.defaults,
       });
     } catch (err) {
@@ -294,7 +330,7 @@ async function runTopMenu(): Promise<void> {
   const target = await select({
     message: "What do you want to do?",
     choices: [
-      { name: "Generate (a page or a features/entities slice)", value: "generate" },
+      { name: "Generate (a page, slice, layout or API route)", value: "generate" },
       { name: "Add (error handling / auth / prettier)", value: "add" },
       { name: "Show the project config", value: "config" },
     ],

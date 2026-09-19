@@ -30,6 +30,27 @@ export function renderTemplate(template: string, context: object): string {
   return renderString(source, context);
 }
 
+/**
+ * Reads a whole directory of template files verbatim, keyed by path relative
+ * to it.
+ *
+ * Verbatim, and that is the point: this carries the FSD methodology skill,
+ * whose reference files contain Vue examples with `{{ comment.text }}` in
+ * them. Handlebars would read that as an expression and render it to nothing
+ * — a doc that silently loses the line it was demonstrating. Nothing in that
+ * tree is project-specific, so there is nothing to interpolate anyway.
+ */
+export function readTemplateTree(dir: string): Record<string, string> {
+  const root = path.join(getTemplatesRoot(), dir);
+  const files: Record<string, string> = {};
+  for (const entry of nodeFs.readdirSync(root, { recursive: true, encoding: "utf8" })) {
+    const file = path.join(root, entry);
+    if (!nodeFs.statSync(file).isFile()) continue;
+    files[entry.split(path.sep).join("/")] = nodeFs.readFileSync(file, "utf8");
+  }
+  return files;
+}
+
 export interface TemplateEntry {
   /** path relative to templates/, e.g. "add/errors/api-error.ts.hbs" */
   template: string;

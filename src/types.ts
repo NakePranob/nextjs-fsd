@@ -8,9 +8,9 @@ export const SLICE_LAYERS: SliceLayer[] = ["features", "entities", "widgets"];
 
 /** FSD segments. A slice gets only the ones it actually has code for —
  *  an empty segment folder is noise. */
-export type Segment = "ui" | "model" | "api" | "lib";
+export type Segment = "ui" | "model" | "api" | "lib" | "config";
 
-export const SEGMENTS: Segment[] = ["ui", "model", "api", "lib"];
+export const SEGMENTS: Segment[] = ["ui", "model", "api", "lib", "config"];
 
 export interface ProjectFeatures {
   /** shared/api: ApiError, catalogs, resolver, axios client, QueryClient. */
@@ -40,6 +40,8 @@ export interface ProjectConfig {
 export interface Naming {
   /** kebab-case: directory and file name — "reset-password". */
   name: string;
+  /** Group path including the slice — "employee/employee-record", or just the name. */
+  directory: string;
   /** PascalCase: component/type identifier — "ResetPassword". */
   pascal: string;
   /** camelCase: hook/variable identifier — "resetPassword". */

@@ -44,7 +44,9 @@ bunx @nakedev/nextjs-fsd generate page dashboard
   written against the shape go-scaffold produces; see their sections below for
   what to change if yours differs.
 
-The legacy `pages/` router is not supported.
+The legacy `pages/` router is not supported. The FSD guide covers it, but every
+generator here targets the App Router — route files, layouts and handlers are
+all App Router shapes.
 
 ## Quick start
 
@@ -80,7 +82,8 @@ to do and then delegates:
 
 ~~~bash
 nextjs-fsd            # menu: generate / add / show config
-nextjs-fsd generate   # menu: page / slice / layout
+nextjs-fsd wizard     # same menu, explicit form
+nextjs-fsd generate   # menu: page / slice / layout / api-route
 nextjs-fsd add        # menu: error handling / auth
 ~~~
 
@@ -119,10 +122,11 @@ anything, and names every missing flag at once instead of failing on the first.
 | Command | Purpose | Alias |
 |---|---|---|
 | init | Shape an existing App Router project into FSD layers | — |
-| generate | Open the page/slice/layout wizard | g |
+| generate | Open the page/slice/layout/API-route wizard | g |
 | generate page [name] | Add a `_pages` slice and its route file | g p |
 | generate slice [layer] [name] | Add a features/entities/widgets slice | g s |
 | generate layout [name] | Add shared chrome for a group of routes | g l |
+| generate api-route [name] | Add a Route Handler in `_app/api-routes` and its `route.ts` | g r |
 | add | Open the infrastructure wizard | — |
 | add error-handling | Add `shared/api`: error type, catalogs, client | add errors |
 | add auth | Add `shared/auth` and a login page | — |
@@ -193,6 +197,7 @@ steiger.config.ts                      # the whole-tree FSD checks
 components.json                        # aims `shadcn add` at src/shared/ui
 docs/fsd.md                            # the convention, in full
 <repo>/.agents/skills/nextjs-fsd/      # the same contract, as a skill
+<repo>/.agents/skills/feature-sliced-design/  # the FSD methodology itself (v2.1)
 <repo>/.claude/skills/nextjs-fsd       # symlink to it, for Claude Code
 AGENTS.md                              # an FSD section appended, or created
 <repo>/.githooks/commit-msg            # subject must be a Conventional Commit
@@ -225,10 +230,16 @@ at the tree rather than assumed false.
 nextjs-fsd generate page settings
 nextjs-fsd generate page dashboard --auth
 nextjs-fsd generate page dashboard --route "(admin)/dashboard" --errors
-nextjs-fsd generate page dealers --client --model
+nextjs-fsd generate page dealers --client --api
 nextjs-fsd generate page loans --route "loans/[id]" --client
+nextjs-fsd generate page dealers loans --defaults   # several at once, each routed by its own name
 nextjs-fsd g p settings --defaults
 ~~~
+
+Names may include a slice group, such as `admin/dashboard`, and `--root` may
+choose another FSD root inside `src/` (for example `src/domain`). Multiple
+page names use their name as their route; pass `--route` only when generating
+one page.
 
 ### Options
 
@@ -237,9 +248,11 @@ nextjs-fsd g p settings --defaults
 | --title \<title\> | Heading and browser title; defaults to the Title Case of the name |
 | --route \<path\> | App Router path; defaults to the page name |
 | --no-route | Write the slice only, no route file |
+| -r, --root \<dir\> | FSD root inside `src/` (default `src`), e.g. `-r src/domain` |
 | --client | Also create a `"use client"` leaf component |
 | --auth | The client leaf sits behind `useRequireSession` (needs `add auth`) |
-| --model | Add this page's TanStack Query hooks (needs `add error-handling`) |
+| --api | Add this page's TanStack Query hooks under `api/` (needs `add error-handling`) |
+| --model | Legacy alias for `--api` |
 | --errors | Add this page's own error catalog (needs `add error-handling`) |
 | --defaults | Skip every question: server component only, route = the page name |
 
@@ -251,12 +264,13 @@ contribute nothing to the URL, so `--route "(admin)/dashboard"` serves
 ### What it generates
 
 ~~~text
-src/_pages/dashboard/index.ts                     # public API — the only thing app/ imports
+src/_pages/dashboard/index.ts                     # client-safe public API (the leaf) — or the page, when server-only
+src/_pages/dashboard/index.server.ts              # --client / --auth: the page + metadata (the server-only entry)
 src/_pages/dashboard/ui/dashboard-page.tsx        # server component + `metadata`
 src/_pages/dashboard/ui/dashboard-content.tsx     # --client / --auth: the "use client" leaf
-src/_pages/dashboard/model/dashboard.ts           # --model: query key, hooks, the record type
+src/_pages/dashboard/api/dashboard.ts             # --api: query key, hooks, the record type
 src/_pages/dashboard/model/dashboard-errors.ts    # --errors: this page's error catalog
-app/(admin)/dashboard/page.tsx                    # re-exports the page and its metadata
+app/(admin)/dashboard/page.tsx                    # re-exports the page and its metadata (from index.server when there is a leaf)
 ~~~
 
 The route file re-exports **both** the component and `metadata`. A route file
@@ -266,19 +280,32 @@ anywhere.
 `"use client"` goes on the leaf, never on the page: a page component that
 needs the browser ships its whole tree to it.
 
-`--model` writes the same file a slice's `api` segment gets — a query key, a
+A page with a leaf has **two public API entries**. `index.ts` carries only the
+client-safe leaf, so a Client Component importing the slice never pulls the
+server module into the client graph (a build error); the server component and
+`metadata` live in `index.server.ts`, which is what the route file imports.
+
+`--api` writes the same file a slice's `api` segment gets — a query key, a
 record type, a list query and a mutation that invalidates the key — into
-`model/`, because a page keeps what it knows about its own data in one
-segment. It stays internal to the slice: the page's `index.ts` exports the
-page, not its hooks.
+`api/`, because that is an API integration. The page's `model/` remains
+available for frontend state, schemas, validation, and business logic. It
+stays internal to the slice: the page's `index.ts` exports the page, not its
+hooks. The old `--model` flag remains as a compatibility alias for `--api`.
 
 ## generate slice [layer] [name] — add a features/entities slice
 
 ~~~bash
 nextjs-fsd generate slice features checkout --segments ui,model
 nextjs-fsd generate slice entities loan --segments ui,api,lib --errors
+nextjs-fsd generate slice entities user profile --segments ui
+nextjs-fsd generate slice features employee/employee-record --segments ui -r src/domain
 nextjs-fsd g s entities loan --defaults
 ~~~
+
+The command accepts multiple slice names, comma-separated or as separate
+arguments, and supports slice groups such as `employee/employee-record`.
+`-r` is the short form of `--root`; layer names take short forms too
+(`f`, `e`, `w`).
 
 Layers are `features`, `entities` and `widgets`. `_pages` slices come from
 `generate page`; `_app` and `shared` are written by `init` and `add`.
@@ -294,7 +321,8 @@ record that decision in `docs/fsd.md`.
 
 | Option | Effect |
 |---|---|
-| --segments \<list\> | Comma-separated: `ui,model,api,lib`; defaults to `ui` |
+| --segments \<list\> | Comma-separated: `ui,model,api,lib,config`; defaults to `ui` |
+| -r, --root \<dir\> | FSD root inside `src/` (default `src`), e.g. `-r src/domain` |
 | --errors | Add this slice's own error catalog (needs `add error-handling`) |
 | --defaults | Skip every question: the `ui` segment only |
 
@@ -309,6 +337,7 @@ noise. `ui/` alone is the common case.
 | model | State and hooks | A `use<Name>` hook |
 | api | Requests | A TanStack Query hook, a mutation that invalidates its key, and the record type |
 | lib | Pure helpers | A formatting function |
+| config | Flags and settings | A `<name>Config` object for values that change between environments or rollouts |
 
 The `api` segment requires `add error-handling`, and says so rather than
 generating a bare `fetch` — which would skip the bearer token, the
@@ -322,6 +351,7 @@ src/entities/loan/ui/loan.tsx          # ui
 src/entities/loan/model/loan.ts        # model
 src/entities/loan/api/loan.ts          # api — LoanRecord, loanKey, useLoanQuery, useCreateLoan
 src/entities/loan/lib/loan.ts          # lib
+src/entities/loan/config/loan.ts       # config — loanConfig flags and settings
 src/entities/loan/model/loan-errors.ts # --errors
 ~~~
 
@@ -373,6 +403,44 @@ the URL.
 
 The component takes a plain `{ children }` rather than `LayoutProps<…>`, since
 Next emits no route-props type for a route group.
+
+## generate api-route [name] — a Route Handler with its logic in `_app`
+
+~~~bash
+nextjs-fsd generate api-route health                 # served at /api/health
+nextjs-fsd generate api-route health --route v1/health
+nextjs-fsd generate api-route health --no-route      # logic only, serve it later
+nextjs-fsd g r health --defaults
+~~~
+
+### Options
+
+| Option | Effect |
+|---|---|
+| --route \<path\> | Where it is served; defaults to `api/<name>` (served at `/api/<name>`) |
+| --no-route | Write the handler only, no `route.ts` |
+| --defaults | Skip every question: route = `api/<name>` |
+
+### What it generates
+
+~~~text
+src/_app/api-routes/health.ts       # the handler logic (getHealth)
+src/_app/api-routes/index.ts        # public API of the api-routes segment
+app/api/health/route.ts             # re-exports it as GET, nothing else
+~~~
+
+The route file names the HTTP method, the logic module names the function:
+`export { getHealth as GET } from "@/_app/api-routes"`. Next.js maps the URL
+to the file, so the file stays a re-export and the work lives in the segment —
+where it can be imported and tested without a request. To serve another method
+from the same URL, export it from the same logic module and add it to the
+route file. One handler may answer two URLs (`--route v1/health` on an
+existing handler), but only when asked — re-running otherwise reports it is
+already served and writes nothing.
+
+Handlers live in `_app`, not `_pages`: a handler is not one route's content,
+it is backend composition shared the way a layout is, and cross-route
+composition is the app layer's job.
 
 ## Re-running a generate command extends it
 
@@ -463,9 +531,10 @@ src/shared/api/error-catalog.ts   # the codes every endpoint can answer with
 src/shared/api/error-resolver.ts  # code -> one sentence, from the caller's catalogs
 src/shared/api/client.ts          # axios instance: bearer token in, ApiError out
 src/shared/api/query-client.ts    # QueryClient + sessionKey; a 401 anywhere ends the session
-src/shared/api/client.test.ts     # bun projects only: the two silent refresh rules
+src/shared/api/client.test.ts     # bun or vitest: the two silent refresh rules
 src/shared/api/index.ts
 src/shared/auth/access-token.ts   # the in-memory token the interceptor reads
+src/shared/auth/index.ts          # its export alone, until `add auth` fills in the rest
 src/shared/config/env.ts          # NEXT_PUBLIC_API_URL
 src/shared/ui/form-error.tsx      # renders a failure, owning no copy of its own
 src/_app/providers/index.tsx      # created if absent, and wired into layout.tsx
@@ -473,7 +542,8 @@ src/_app/providers/index.tsx      # created if absent, and wired into layout.tsx
 ~~~
 
 Adds `axios` and `@tanstack/react-query`, plus `@types/bun` and a `test`
-script on a bun project.
+script on a bun project. The test is written wherever it runs with no extra
+setup — `bun test` or vitest — and skipped elsewhere with the reason printed.
 
 ### The rules this encodes
 
@@ -537,10 +607,11 @@ so there is no choice to offer.
 ~~~text
 src/shared/auth/session.ts          # useSession, useLogin, useLogout
 src/shared/auth/require-session.ts  # useRequireSession + safeNext — UX, not the gate
-src/shared/auth/require-session.test.ts  # bun projects only: the ?next= guard
+src/shared/auth/require-session.test.ts  # bun or vitest: the ?next= guard
 src/shared/auth/auth-errors.ts      # the auth surface's own catalog
 src/shared/auth/index.ts
 src/_pages/login/index.ts
+src/_pages/login/index.server.ts    # the page + metadata (the form is a client leaf)
 src/_pages/login/ui/login-page.tsx  # server component
 src/_pages/login/ui/login-form.tsx  # "use client" leaf, native HTML validation
 app/login/page.tsx
@@ -610,13 +681,15 @@ app/                                   # Next.js App Router — routing only
 src/
 ├── _app/                              # FSD app layer
 │   ├── layouts/                       # shells shared by a group of routes
+│   ├── api-routes/                    # Route Handler logic, re-exported as GET from app/api/
 │   ├── providers/                     # QueryClientProvider and friends
 │   └── styles/globals.css             # Tailwind @theme + @source
 ├── _pages/<page>/                     # one slice per route
 │   ├── ui/<page>-page.tsx             # server component + metadata
 │   ├── ui/<thing>.tsx                 # "use client" only on the leaves
 │   ├── model/<page>-errors.ts         # this page's error catalog
-│   └── index.ts                       # public API
+│   ├── index.ts                       # client-safe public API (the leaf, or the page when server-only)
+│   └── index.server.ts                # with a leaf: the page + metadata, what the route imports
 ├── features/<slice>/                  # a whole user action, once two pages need it
 ├── entities/<slice>/                  # a business object, once two features need it
 └── shared/                            # infrastructure only

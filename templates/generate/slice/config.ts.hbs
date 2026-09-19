@@ -1,0 +1,9 @@
+/**
+ * Slice-level settings for {{name}}: feature flags and values that change
+ * between environments or rollouts. Anything derived at runtime belongs in
+ * model/ instead — this file is constants with names, so a flag flips without
+ * reading logic.
+ */
+export const {{camel}}Config = {
+  enabled: true,
+} as const;

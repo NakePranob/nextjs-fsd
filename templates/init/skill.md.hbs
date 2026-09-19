@@ -32,8 +32,8 @@ truth if this file and it ever disagree.
 
 **FSD methodology questions are not this skill's job.** Whether a thing should
 be an entity at all, when to extract from a page, cross-import and `@x`
-patterns, how strict to be — that is the `feature-sliced-design` skill
-(fsd.how). This one only covers driving the generator in this repo.
+patterns, how strict to be — that is the `feature-sliced-design` skill, which
+`init` wrote next to this one. This one only covers driving the generator in this repo.
 
 ## When to use this skill
 
@@ -41,6 +41,7 @@ patterns, how strict to be — that is the `feature-sliced-design` skill
 - A new reusable feature or business object is requested, even without the
   words "feature" or "entity".
 - Several routes need shared chrome (a sidebar, an auth card) → a layout.
+- A URL must answer data rather than render a screen → an API route.
 - The project needs API error handling or auth for the first time.
 - An existing slice needs a segment it does not have yet (state, requests,
   helpers, an error catalog).
@@ -50,6 +51,7 @@ Examples that all use this skill:
 - "add a settings screen" → `generate page settings`
 - "the dashboard should require login" → `generate page dashboard --auth`
 - "admin pages need a shared sidebar" → `generate layout admin`
+- "the app needs a health endpoint" → `generate api-route health`
 - "loans need to be reusable across screens" → `generate slice entities loan`
 - "show a real message when saving fails" → `add error-handling`, then
   `--errors` on the slice that owns the failing call
@@ -83,9 +85,10 @@ opens a prompt, and in a non-interactive shell that exits 1 without writing
 anything.
 
 ~~~bash
-nextjs-fsd generate page <name> [--route <path>] [--no-route] [--client] [--auth] [--errors] [--defaults]
-nextjs-fsd generate slice <features|entities|widgets> <name> [--segments ui,model,api,lib] [--errors] [--defaults]
+nextjs-fsd generate page <name...> [--title <t>] [--route <path>] [--no-route] [--client] [--auth] [--api] [--errors] [-r <root>]
+nextjs-fsd generate slice <features|entities|widgets> <name...> [--segments <list>] [-r <root>] [--errors]
 nextjs-fsd generate layout <name> [--route <path>] [--no-route] [--defaults]
+nextjs-fsd generate api-route <name> [--route <path>] [--no-route] [--defaults]
 nextjs-fsd add error-handling [-y] [--no-install]
 nextjs-fsd add auth [-y] [--no-install]
 nextjs-fsd add prettier [-y] [--no-install]
@@ -126,7 +129,8 @@ not a failure to work around.
 Two consequences worth knowing:
 
 - The page component is an existing file, so a leaf added later is not rendered
-  by anything yet. The command prints the one import line to add; add it.
+  by anything yet. The command prints the lines to add — the leaf import, plus
+  finishing the `index.server.ts` split below; add them.
 - A page already routed from elsewhere does not get a second route file. Two
   `page.tsx` resolving to one URL is a Next.js build error.
 
@@ -135,10 +139,22 @@ Two consequences worth knowing:
 Breaking one of these is silent — the build passes and the app is wrong.
 
 - **A route file re-exports the page *and* its `metadata`.** `export { X as
-  default } from "..."` alone drops the page title with no error.
+  default } from "..."` alone drops the page title with no error — from the
+  slice root, or from `<slice>/index.server` when the page has a client leaf.
 - **`"use client"` goes on the leaf, not the page.** A page component stays a
   server component; state, effects and events live in a `ui/<thing>.tsx`.
-- **Imports point downwards, and a slice is entered through its `index.ts`.**
+- **A page with a client leaf has two public API entries.** `index.ts` carries
+  only the client-safe leaf; the server component and `metadata` live in
+  `index.server.ts`, which is what the route imports. A Client Component
+  importing the slice must never pull the server module into the client graph,
+  which Next.js rejects at build time.
+- **A `route.ts` re-exports the handler as the HTTP method, nothing else.**
+  `export { getX as GET } from "{{alias}}/_app/api-routes"` — the work lives
+  in the segment, the file stays the URL mapping. `middleware.js` and
+  `instrumentation.js` stay at the project root for the same reason in
+  reverse: Next.js reads them there and nowhere else.
+- **Imports point downwards, and a slice is entered through its public API
+  (`index.ts`, or `index.server.ts` for server-only modules).**
   `{{alias}}/features/x`, never `{{alias}}/features/x/ui/x`. Inside a slice the
   import is relative.
 - **Never render `error.message` as UI copy.** Add the code to the domain's own
