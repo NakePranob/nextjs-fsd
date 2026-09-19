@@ -193,6 +193,25 @@ test("every generated eslint block configures no-restricted-imports at most once
   assert.ok(!blocks.some((block) => block.files.some((glob) => glob === "src/**/*.{ts,tsx}")));
 });
 
+test("the slice boundary exempts index.server.ts, the second public API entry", async () => {
+  // A page with a client leaf is routed from <slice>/index.server — without
+  // this exemption every generated route file fails the project's own lint.
+  // Parsed from the rendered config rather than its text, so a renamed
+  // variable does not fool it.
+  const { renderTemplate } = await import("../dist/utils/render.js");
+  const source = renderTemplate("init/eslint.fsd.mjs.hbs", { srcDir: "src", appDir: "app", alias: "@" });
+  const module = await import(`data:text/javascript,${encodeURIComponent(source)}`);
+  const groups = module.default.flatMap((block) =>
+    block.rules["no-restricted-imports"][1].patterns.flatMap((pattern) =>
+      Array.isArray(pattern.group) ? pattern.group : [pattern.group]
+    )
+  );
+  for (const layer of ["_pages", "widgets", "features", "entities"]) {
+    assert.ok(groups.includes(`@/${layer}/*/**`), `${layer} deep imports stay restricted`);
+    assert.ok(groups.includes(`!@/${layer}/*/index.server`), `${layer} exempts index.server`);
+  }
+});
+
 test("appDir is posix even on Windows, because it becomes a glob", () => {
   // path.join would give "src\\app" on Windows, and that string is
   // interpolated into ESLint `files` globs and Tailwind `@source` lines, where

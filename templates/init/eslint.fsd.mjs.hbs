@@ -30,12 +30,15 @@ const SLICED = ["_pages", "widgets", "features", "entities"];
  *
  * One segment past the layer is the slice itself, which is exactly what
  * another layer should import; two or more is its insides, which nothing
- * should. That includes a file reaching into its OWN slice through the alias —
+ * should — with one exception: `<slice>/index.server`, the server-only half
+ * of a page slice's public API, which is what route files import. That
+ * includes a file reaching into its OWN slice through the alias —
  * inside a slice the import is relative, which is what keeps a slice movable.
  */
 const insideSlice = {
-  group: SLICED.map((layer) => `{{alias}}/${layer}/*/**`),
-  message: 'reaches inside a slice — import it through its index.ts, e.g. "{{alias}}/features/<slice>".',
+  group: SLICED.flatMap((layer) => [`{{alias}}/${layer}/*/**`, `!{{alias}}/${layer}/*/index.server`]),
+  message:
+    'reaches inside a slice — import it through its public API (index.ts, or index.server.ts for a page with a client leaf), e.g. "{{alias}}/features/<slice>".',
 };
 
 /**

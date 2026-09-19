@@ -40,9 +40,11 @@ page with a client leaf changes shape.
   carries only the leaf; the server component and `metadata` moved to
   `index.server.ts`, which is what the route file imports. A Client
   Component importing the slice used to pull the server module into the
-  client graph — a build error. Re-copy `index.ts`, add `index.server.ts`,
+  client graph — a build   error. Re-copy `index.ts`, add `index.server.ts`,
   and repoint the route at `<slice>/index.server`. The login slice from
-  `add auth` splits the same way.
+  `add auth` splits the same way. Also copy the `!*/index.server`
+  exemption into the `insideSlice` group in `eslint.fsd.mjs` — without it
+  the new route import fails the project's own lint.
 - **Page query hooks moved from `model/` to `api/`.** A page generated
   with `--model` keeps its file where it is — nothing is rewritten — but
   new `--api` (or `--model`) output lands in `api/`, where an API
