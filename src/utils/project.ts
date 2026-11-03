@@ -87,6 +87,26 @@ export function detectPackageManager(projectDir: string): PackageManager {
 }
 
 /**
+ * Refuses to overwrite a skill whose content this run would change.
+ *
+ * The skill is repository-wide, so every package in a monorepo maps to the
+ * same file. The same CLI version renders identical content and the write is a
+ * no-op; a different version, or a hand-edited file, means two sources of
+ * truth — and silently keeping the newer run is how guidance drifts from the
+ * code it describes.
+ */
+export function assertAgentSkillAvailable(projectDir: string, name: string, content: string): void {
+  const root = findRepoRoot(projectDir);
+  const skillFile = path.join(root, ".agents", "skills", name, "SKILL.md");
+  if (!fs.existsSync(skillFile)) return;
+  if (fs.readFileSync(skillFile, "utf8") === content) return;
+  throw new Error(
+    `agent skill "${name}" already exists at ${toPosix(path.relative(projectDir, skillFile))} with different content — ` +
+      "it was written by a different CLI version or edited by hand; update or remove it, then run init again"
+  );
+}
+
+/**
  * Writes an agent skill where the agents actually look for it.
  *
  * Real file under `.agents/skills/`, symlinked from `.claude/skills/`: Claude
@@ -103,6 +123,7 @@ export function writeAgentSkill(projectDir: string, name: string, content: strin
   const relative = (target: string) => toPosix(path.relative(projectDir, target)) || ".";
 
   const real = path.join(root, ".agents", "skills", name, "SKILL.md");
+  assertAgentSkillAvailable(projectDir, name, content);
   fs.ensureDirSync(path.dirname(real));
   fs.writeFileSync(real, content);
   const written = [relative(real)];
@@ -143,6 +164,10 @@ function lstatOrNull(target: string): fs.Stats | null {
  * whole tree (SKILL.md plus references/) in one call. Returns what was
  * written, plus a note when there is one, because the caller prints a file
  * count for a vendored tree rather than eight added lines.
+ *
+ * The tree is CLI-owned and every file is replaced on the next `init`; only
+ * SKILL.md is checked for conflicts (see assertAgentSkillAvailable). A
+ * hand-edited references/ file is therefore not preserved.
  */
 export function writeAgentSkillTree(
   projectDir: string,
