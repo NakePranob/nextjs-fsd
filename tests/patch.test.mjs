@@ -281,6 +281,21 @@ test("the skill goes to the repository root, not the workspace it was run in", (
   assert.doesNotThrow(() => writeAgentSkill(workspace, "nextjs-fsd", "# skill\n"));
 });
 
+test("a skill from a different CLI version is reported, not overwritten", () => {
+  const repo = fs.mkdtempSync(path.join(os.tmpdir(), "nextjs-fsd-conflict-"));
+  fs.mkdirSync(path.join(repo, ".git"));
+  const workspace = path.join(repo, "web");
+  fs.mkdirSync(workspace);
+
+  writeAgentSkill(workspace, "nextjs-fsd", "# skill v1\n");
+  assert.throws(
+    () => writeAgentSkill(workspace, "nextjs-fsd", "# skill v2\n"),
+    /already exists.*different content/
+  );
+  // The file a user may have edited stays exactly as it was.
+  assert.equal(fs.readFileSync(path.join(repo, ".agents/skills/nextjs-fsd/SKILL.md"), "utf8"), "# skill v1\n");
+});
+
 test("no repository above it falls back to the project directory", () => {
   const loose = fs.mkdtempSync(path.join(os.tmpdir(), "nextjs-fsd-loose-"));
   assert.equal(findRepoRoot(loose), path.resolve(loose));

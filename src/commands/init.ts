@@ -10,10 +10,10 @@ import { applyTemplates, readTemplateTree, renderTemplate } from "../utils/rende
 import {
   addDependencies,
   appendScript,
+  assertAgentSkillAvailable,
   detectAppDir,
   eslintRestrictsImports,
   detectPackageManager,
-  findRepoRoot,
   installCommitHook,
   installDependencies,
   patchEslintConfig,
@@ -124,16 +124,16 @@ export async function initProject(projectDir: string, opts: InitOptions): Promis
     packageManager,
     cssSourceApp: toPosix(path.relative(path.join(srcDir, "_app", "styles"), appDir)),
     cssSourceSrc: toPosix(path.relative(path.join(srcDir, "_app", "styles"), srcDir)),
-    // The skill lives at the repository root and docs/fsd.md lives in the
-    // project — the same directory only in a single-package repo. In a
-    // monorepo the link has to cross back into the workspace.
-    docsFromSkill: toPosix(
-      path.relative(
-        path.join(findRepoRoot(projectDir), ".agents", "skills", "nextjs-fsd"),
-        path.join(path.resolve(projectDir), "docs", "fsd.md")
-      )
-    ),
   };
+
+  // Checked before any write, not when the skill is finally written: a
+  // conflict discovered after nextjs-fsd.config.json exists leaves a project
+  // that `init` refuses to re-run and an agent with the wrong guidance.
+  assertAgentSkillAvailable(projectDir, "nextjs-fsd", renderTemplate("init/skill.md.hbs", context));
+  const methodologySkill = readTemplateTree("init/fsd-skill")["SKILL.md"];
+  if (methodologySkill !== undefined) {
+    assertAgentSkillAvailable(projectDir, "feature-sliced-design", methodologySkill);
+  }
 
   const written = await applyTemplates(projectDir, [
     {
