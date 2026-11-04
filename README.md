@@ -67,12 +67,20 @@ when a slice actually needs them — FSD's own advice, not a shortcut.
 | Area | What `nextjs-fsd` gives you |
 | --- | --- |
 | **Layers** | `app`, `pages`, `widgets`, `features`, `entities`, and `shared` in the FSD shape, with no empty directories. |
-| **Boundaries** | ESLint import rules plus Steiger for the whole tree, so a cross-import fails before review. |
+| **Boundaries** | ESLint import rules plus Steiger for the whole tree, so a cross-import fails before review. [See the proof](#proof-it-catches-a-violation). |
 | **Generators** | Pages, slices, layouts, and API routes with consistent segments, public APIs, and tests. |
 | **Auth** | A login page, session store, access token handling, route guard, and the API client it needs. |
 | **Error handling** | One API error type, error catalogs, and the client boundary that normalises failures. |
 | **Formatting** | Prettier with Tailwind class sorting. |
 | **Agent guidance** | Repository-level `AGENTS.md`, `CLAUDE.md`, and a generated skill that knows the project's paths. |
+
+## CLI or manual setup?
+
+A manual setup gives you the most freedom. It is the right choice when the architecture is intentionally different, the project is a one-off, or you need to own every file from the first commit. The cost is that every convention — layer boundaries, auth wiring, framework path rules — has to be rebuilt and reviewed again.
+
+The CLI is for repetition. It gives the next project the same shape, encodes framework constraints such as the Next.js `app` + `src/pages` collision, and ships boundary checks and agent guidance with the scaffold. It is not automatically faster; a fair speed benchmark has not been run. It is more consistent when more than one person or agent touches the repo.
+
+Use the CLI when repeatability, reviewable boundaries, and a stable target for AI agents matter. Use a manual setup when the architecture itself is the experiment.
 
 ## How it fits together
 
@@ -81,6 +89,55 @@ when a slice actually needs them — FSD's own advice, not a shortcut.
 Next.js owns routing. The FSD app layer (`src/_app`) owns providers, global
 layouts, and styles. Pages compose widgets, widgets compose features, features
 use entities, and everything may use shared. The linters enforce that direction.
+
+## Proof it catches a violation
+
+`shared` is the bottom layer. If it imports `entities` or `pages`, the foundation starts to depend on a screen, becomes harder to test in isolation, and can create circular dependencies. The public `index.ts` rule keeps slices replaceable.
+
+This is a real failure case:
+
+```bash
+mkdir -p src/shared/ui
+cat > src/shared/ui/leak.ts <<'EOF'
+import { Order } from "@/entities/order";
+export const leak = Order;
+EOF
+
+npm run lint
+# exit 1
+# src/shared/ui/leak.ts:1
+# no-restricted-imports
+```
+
+`npm run lint` stops at ESLint. Run Steiger separately to see its rule:
+
+```bash
+npx steiger ./src
+# exit 1
+# fsd/forbidden-imports
+# Forbidden import from higher layer "entities"
+```
+
+Remove the probe, or change it to a shared import:
+
+```bash
+npm run lint
+# exit 0
+```
+
+**What this catches:** wrong-direction alias imports and whole-tree FSD structure. **What it does not catch:** dynamic imports, runtime dependency injection, same-layer coupling, and server-side authorization.
+
+## Same input, same output
+
+Measured pilot, not yet a CI gate: three clean copies of the same base, the same CLI version, and the same flags.
+
+- 38 files in each run
+- manifest `0ea89b20…`
+- A↔B diff: 0
+- A↔C diff: 0
+- editing one generated file produced an 11-line manifest diff
+
+The manifest is every generated file's relative path plus its SHA-256, excluding `node_modules`, `.git`, `.next`, `.svelte-kit`, and `build`.
 
 ## Generated project
 
@@ -115,6 +172,19 @@ needs them.
 Run any command with `--help` for its current options. The full command
 reference — wizard behavior, every option, generated output, and assumptions —
 lives in [`REFERENCE.md`](REFERENCE.md).
+
+## Auth: beta
+
+`add auth` generates the client-side session flow: login page, in-memory access token, refresh handling, session guard, and API error boundary. It is beta: generated projects exercise it, but it has not been audited for production.
+
+**What you still own:** server-side authentication and authorization, CSRF/CORS/cookie policy, token lifetime, and the API contract. The client guard is UX, not authorization.
+
+## What this does not cover
+
+- A production security audit
+- Server-side authorization tests
+- Dynamic imports and runtime dependency injection
+- Every possible FSD coupling; same-layer cross-slice review remains
 
 ## Learn more
 
