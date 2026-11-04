@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="600" viewBox="0 0 1200 600" font-family="'SF Pro Display', 'Helvetica Neue', Arial, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#94A3B8"/>
+    </marker>
+    <marker id="arrow-accent" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#7C5CFF"/>
+    </marker>
+  </defs>
+  <rect width="1200" height="600" fill="#F8FAFC"/>
+  <text x="70" y="62" fill="#0F172A" font-size="32" font-weight="750" letter-spacing="-0.8">Feature-Sliced Design</text>
+  <text x="72" y="94" fill="#475569" font-size="18">Imports point down. One shape for every slice.</text>
+
+  <text x="60" y="126" fill="#94A3B8" font-size="12" font-weight="600" letter-spacing="1.6">IMPORTS POINT DOWN</text>
+  <rect x="90" y="140" width="760" height="54" rx="12" fill="#FFFFFF" stroke="#CBD5E1"/>
+  <rect x="90" y="140" width="7" height="54" rx="3.5" fill="#7C5CFF"/>
+  <text x="118" y="174" fill="#0F172A" font-size="22" font-weight="700">app</text>
+  <text x="230" y="174" fill="#475569" font-size="16">providers, global layouts, styles</text>
+  <line x1="60" y1="194" x2="60" y2="204" stroke="#94A3B8" stroke-width="2" marker-end="url(#arrow)"/>
+  <rect x="90" y="204" width="760" height="54" rx="12" fill="#FFFFFF" stroke="#CBD5E1"/>
+  <rect x="90" y="204" width="7" height="54" rx="3.5" fill="#7C5CFF"/>
+  <text x="118" y="238" fill="#0F172A" font-size="22" font-weight="700">pages</text>
+  <text x="230" y="238" fill="#475569" font-size="16">one screen per route</text>
+  <line x1="60" y1="258" x2="60" y2="268" stroke="#94A3B8" stroke-width="2" marker-end="url(#arrow)"/>
+  <rect x="90" y="268" width="760" height="54" rx="12" fill="#FFFFFF" stroke="#CBD5E1"/>
+  <rect x="90" y="268" width="7" height="54" rx="3.5" fill="#7C5CFF"/>
+  <text x="118" y="302" fill="#0F172A" font-size="22" font-weight="700">widgets</text>
+  <text x="230" y="302" fill="#475569" font-size="16">composed UI blocks</text>
+  <line x1="60" y1="322" x2="60" y2="332" stroke="#94A3B8" stroke-width="2" marker-end="url(#arrow)"/>
+  <rect x="90" y="332" width="760" height="54" rx="12" fill="#FFFFFF" stroke="#CBD5E1"/>
+  <rect x="90" y="332" width="7" height="54" rx="3.5" fill="#7C5CFF"/>
+  <text x="118" y="366" fill="#0F172A" font-size="22" font-weight="700">features</text>
+  <text x="230" y="366" fill="#475569" font-size="16">user actions and flows</text>
+  <line x1="60" y1="386" x2="60" y2="396" stroke="#94A3B8" stroke-width="2" marker-end="url(#arrow)"/>
+  <rect x="90" y="396" width="760" height="54" rx="12" fill="#FFFFFF" stroke="#CBD5E1"/>
+  <rect x="90" y="396" width="7" height="54" rx="3.5" fill="#7C5CFF"/>
+  <text x="118" y="430" fill="#0F172A" font-size="22" font-weight="700">entities</text>
+  <text x="230" y="430" fill="#475569" font-size="16">business entities and their UI</text>
+  <line x1="60" y1="450" x2="60" y2="460" stroke="#94A3B8" stroke-width="2" marker-end="url(#arrow)"/>
+  <rect x="90" y="460" width="760" height="54" rx="12" fill="#FFFFFF" stroke="#CBD5E1"/>
+  <rect x="90" y="460" width="7" height="54" rx="3.5" fill="#7C5CFF"/>
+  <text x="118" y="494" fill="#0F172A" font-size="22" font-weight="700">shared</text>
+  <text x="230" y="494" fill="#475569" font-size="16">ui, api, config, lib</text>
+
+  <rect x="900" y="140" width="230" height="190" rx="16" fill="#7C5CFF" fill-opacity="0.06" stroke="#7C5CFF" stroke-opacity="0.28"/>
+  <text x="924" y="176" fill="#7C5CFF" font-size="13" font-weight="700" letter-spacing="1.4">ROUTE ENTRY</text>
+  <text x="924" y="210" fill="#0F172A" font-size="20" font-weight="700">Next.js app/</text>
+  <text x="924" y="240" fill="#475569" font-size="14">Next.js routes stay in the</text>
+  <text x="924" y="260" fill="#475569" font-size="14">App Router; FSD owns the</text>
+  <text x="924" y="280" fill="#475569" font-size="14">screens and composition.</text>
+
+  <rect x="900" y="356" width="230" height="150" rx="16" fill="#FFFFFF" stroke="#CBD5E1"/>
+  <text x="924" y="390" fill="#0F172A" font-size="14" font-weight="700">Boundaries enforced</text>
+  <text x="924" y="418" fill="#475569" font-size="14">ESLint import rules</text>
+  <text x="924" y="440" fill="#475569" font-size="14">+ Steiger whole-tree</text>
+  <text x="924" y="470" fill="#7C5CFF" font-size="13" font-weight="600">one direction, checked</text>
+
+  <text x="70" y="576" fill="#94A3B8" font-size="12">Features and entities appear when a slice needs them; they are not created empty.</text>
+</svg>

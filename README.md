@@ -1,5 +1,5 @@
 <div align="center">
-  <img src=".github/assets/readme/hero.png" alt="nextjs-fsd: Next.js that stays on Feature-Sliced Design" width="100%">
+  <img src="https://raw.githubusercontent.com/NakePranob/nextjs-fsd/main/.github/assets/readme/hero.png" alt="nextjs-fsd: Next.js that stays on Feature-Sliced Design" width="100%">
   <h1>nextjs-fsd</h1>
   <p><strong>Next.js that stays on Feature-Sliced Design.</strong></p>
   <p>
@@ -76,15 +76,7 @@ when a slice actually needs them — FSD's own advice, not a shortcut.
 
 ## How it fits together
 
-```mermaid
-flowchart TB
-  ROUTE[Next.js App Router routes] --> PAGE[pages]
-  PAGE --> WIDGET[widgets]
-  WIDGET --> FEATURE[features]
-  FEATURE --> ENTITY[entities]
-  ENTITY --> SHARED[shared]
-  ROUTE --> APPF[src/_app: providers, layouts, styles]
-```
+![Feature-Sliced Design layers for nextjs-fsd](https://raw.githubusercontent.com/NakePranob/nextjs-fsd/main/.github/assets/readme/architecture.png)
 
 Next.js owns routing. The FSD app layer (`src/_app`) owns providers, global
 layouts, and styles. Pages compose widgets, widgets compose features, features
