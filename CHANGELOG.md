@@ -9,7 +9,9 @@ Only versions with a `v*.*.*` tag are on npm. 0.2.0, 0.3.0 and 0.3.1 were
 released into the repository but never tagged, so `npm install @nakedev/nextjs-fsd`
 still resolves 0.1.1.
 
-## 0.4.0 — not tagged yet
+## 0.4.0
+
+Released with the README landing page and a static architecture diagram that renders on npm.
 
 New generators and generator ergonomics, plus the two shapes from the
 official FSD Next.js guide this CLI was missing. Old invocations keep
