@@ -7,7 +7,7 @@
 // borrows packages it never installed), and a Next.js release that changes
 // behaviour under us. Both need the real thing, and the real thing costs
 // minutes and a network — so it runs on demand and in CI, not on every save.
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -35,6 +35,11 @@ function run(command, args, cwd, label) {
     console.log(`  FAIL ${label}\n${output.split("\n").slice(-25).map((line) => `       ${line}`).join("\n")}`);
     return null;
   }
+}
+
+function capture(command, args, cwd) {
+  const result = spawnSync(command, args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+  return { status: result.status, output: `${result.stdout ?? ""}${result.stderr ?? ""}` };
 }
 
 function ok(label) {
@@ -116,6 +121,28 @@ for (const entry of MATRIX) {
   if (run(entry.manager === "bun" ? "bun" : "npm", ["run", "lint"], dir, `${entry.name}: lint`) !== null) {
     ok(`${entry.name}: lint`);
   }
+
+  // A clean lint is necessary but not sufficient: a config that matches nothing
+  // also reports zero. Write a real upward import and require both linters to
+  // reject it, naming their own rule.
+  const probe = path.join(dir, "src", "shared", "lib", "boundary-probe.ts");
+  fs.mkdirSync(path.dirname(probe), { recursive: true });
+  fs.writeFileSync(probe, 'import { Loan } from "@/entities/loan";\n\nexport const probe = Loan;\n');
+  const eslintProbe = capture(runner, ["eslint", "src/shared/lib/boundary-probe.ts"], dir);
+  if (eslintProbe.status === 0 || !eslintProbe.output.includes("no-restricted-imports")) {
+    failures += 1;
+    console.log(`  FAIL ${entry.name}: eslint did not reject the boundary probe`);
+  }
+  const steigerProbe = capture(runner, ["steiger", "./src"], dir);
+  if (steigerProbe.status === 0 || !steigerProbe.output.includes("fsd/forbidden-imports")) {
+    failures += 1;
+    console.log(`  FAIL ${entry.name}: steiger did not reject the boundary probe`);
+  }
+  if (eslintProbe.status !== 0 && steigerProbe.status !== 0) {
+    ok(`${entry.name}: boundary probe rejected by eslint + steiger`);
+  }
+  fs.rmSync(probe, { force: true });
+
   if (entry.manager === "bun" && run("bun", ["test"], dir, `${entry.name}: bun test`) !== null) {
     ok(`${entry.name}: bun test`);
   }
