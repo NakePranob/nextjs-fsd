@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="360" viewBox="0 0 1200 360" font-family="'SF Pro Display', 'Helvetica Neue', Arial, sans-serif">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#08111F"/>
+      <stop offset="0.55" stop-color="#0B1628"/>
+      <stop offset="1" stop-color="#0D1B30"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.18" cy="0.2" r="0.7">
+      <stop offset="0" stop-color="#7C5CFF" stop-opacity="0.24"/>
+      <stop offset="1" stop-color="#7C5CFF" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glow2" cx="0.86" cy="0.9" r="0.6">
+      <stop offset="0" stop-color="#7C5CFF" stop-opacity="0.18"/>
+      <stop offset="1" stop-color="#7C5CFF" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#7FA6D8" stroke-opacity="0.06" stroke-width="1"/>
+    </pattern>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="14" stdDeviation="24" flood-color="#000000" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+
+  <rect width="1200" height="360" fill="url(#bg)"/>
+  <rect width="1200" height="360" fill="url(#grid)"/>
+  <rect width="1200" height="360" fill="url(#glow)"/>
+  <rect width="1200" height="360" fill="url(#glow2)"/>
+
+  <rect x="64" y="54" width="46" height="46" rx="13" fill="#7C5CFF" fill-opacity="0.14" stroke="#7C5CFF" stroke-opacity="0.45"/>
+  <path d="M82 77h10M82 84h7M82 91h12" stroke="#C9B8FF" stroke-width="4" stroke-linecap="round"/>
+  <circle cx="100" cy="70" r="3.5" fill="#7C5CFF"/>
+
+  <text x="128" y="86" fill="#8FB4D9" font-size="19" font-weight="600" letter-spacing="2.4">NAKEDEV / NEXT</text>
+
+  <text x="64" y="176" fill="#F4F8FF" font-size="64" font-weight="750" letter-spacing="-2">nextjs-fsd</text>
+  <text x="66" y="214" fill="#A9BCD6" font-size="22" font-weight="450">Next.js that stays on Feature-Sliced Design.</text>
+
+  <g font-size="15" font-weight="600">
+    <rect x="66" y="246" width="138" height="32" rx="16" fill="#0F2033" stroke="#24405C"/>
+    <text x="135" y="267" fill="#C9B8FF" text-anchor="middle">Next.js 15/16</text>
+    <rect x="214" y="246" width="113" height="32" rx="16" fill="#0F2033" stroke="#24405C"/>
+    <text x="270" y="267" fill="#C9B8FF" text-anchor="middle">App Router</text>
+    <rect x="337" y="246" width="113" height="32" rx="16" fill="#0F2033" stroke="#24405C"/>
+    <text x="394" y="267" fill="#C9B8FF" text-anchor="middle">TypeScript</text>
+    <rect x="460" y="246" width="53" height="32" rx="16" fill="#0F2033" stroke="#24405C"/>
+    <text x="486" y="267" fill="#C9B8FF" text-anchor="middle">FSD</text>
+  </g>
+
+  <g filter="url(#shadow)">
+    <rect x="620" y="54" width="516" height="252" rx="20" fill="#0A1526" stroke="#213A56"/>
+    <path d="M620 86h516" stroke="#1B304A"/>
+    <circle cx="648" cy="71" r="5" fill="#FF6B6B"/>
+    <circle cx="666" cy="71" r="5" fill="#FFC857"/>
+    <circle cx="684" cy="71" r="5" fill="#3DDC97"/>
+    <text x="1110" y="76" fill="#5E7896" font-size="13" text-anchor="end" font-family="'SF Mono', Menlo, monospace">zsh</text>
+  </g>
+
+  <g font-family="'SF Mono', 'JetBrains Mono', Menlo, monospace" font-size="16">
+    <text x="660" y="124" fill="#6E89A8">$</text>
+    <text x="682" y="124" fill="#EAF2FF">npx @nakedev/nextjs-fsd init</text>
+    <text x="660" y="164" fill="#3DDC97">✓</text>
+    <text x="686" y="164" fill="#C9D8EA">FSD layers + import boundaries</text>
+    <text x="660" y="198" fill="#3DDC97">✓</text>
+    <text x="686" y="198" fill="#C9D8EA">pages, slices, layouts, one shape</text>
+    <text x="660" y="232" fill="#3DDC97">✓</text>
+    <text x="686" y="232" fill="#C9D8EA">auth, error handling, prettier</text>
+    <text x="660" y="276" fill="#6E89A8"># one init. every route stays in its layer.</text>
+  </g>
+
+  <text x="1100" y="334" fill="#4E6A88" font-size="12" text-anchor="end" font-family="'SF Mono', Menlo, monospace">nakedev-next</text>
+</svg>
