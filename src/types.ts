@@ -21,6 +21,22 @@ export interface ProjectFeatures {
   prettier: boolean;
 }
 
+export type SingleShape = "bare" | "data";
+export type ListShape = "data-limit-offset-total" | "data-meta" | "items-total";
+export type ErrorShape = "error-object" | "errors-array" | "problem-json";
+
+export interface ResolvedHttpContract {
+  single: SingleShape;
+  list: ListShape;
+  error: ErrorShape;
+}
+
+export interface HttpContractConfig {
+  preset: string;
+  resolved: ResolvedHttpContract;
+  presetHash: string;
+}
+
 export interface ProjectConfig {
   schemaVersion: number;
   /** Language the generated user-facing copy is written in. */
@@ -33,6 +49,8 @@ export interface ProjectConfig {
   alias: string;
   packageManager: PackageManager;
   features: ProjectFeatures;
+  /** HTTP response contract shared with the Go backend. */
+  http: HttpContractConfig;
   /** CLI version that last wrote this file — for diagnosing template drift. */
   scaffoldVersion?: string;
 }

@@ -1,9 +1,10 @@
-import axios, { type CreateAxiosDefaults, type InternalAxiosRequestConfig } from "axios";
+import axios, { type AxiosRequestConfig, type CreateAxiosDefaults, type InternalAxiosRequestConfig } from "axios";
 
 import { getAccessToken, setAccessToken } from "{{alias}}/shared/auth/access-token";
 import { API_URL } from "{{alias}}/shared/config";
 
 import { toApiError } from "./api-error";
+import { parsePage, parseSingle } from "./contract";
 
 const REFRESH_PATH = "/auth/refresh";
 
@@ -89,3 +90,29 @@ export function createApiClient(defaults: CreateAxiosDefaults = {}) {
 }
 
 export const { api, refreshAccessToken } = createApiClient({ baseURL: API_URL });
+
+/**
+ * Contract-aware writes and reads. Feature code uses these instead of
+ * response.data directly, so a Go API preset change does not leak into every
+ * slice.
+ */
+export const apiClient = {
+  getSingle<T>(url: string, config?: AxiosRequestConfig): Promise<T> {
+    return api.get(url, config).then((response) => parseSingle<T>(response.data));
+  },
+  getPage<T>(url: string, config?: AxiosRequestConfig) {
+    return api.get(url, config).then((response) => parsePage<T>(response.data));
+  },
+  postSingle<T>(url: string, body?: unknown, config?: AxiosRequestConfig): Promise<T> {
+    return api.post(url, body, config).then((response) => parseSingle<T>(response.data));
+  },
+  putSingle<T>(url: string, body?: unknown, config?: AxiosRequestConfig): Promise<T> {
+    return api.put(url, body, config).then((response) => parseSingle<T>(response.data));
+  },
+  patchSingle<T>(url: string, body?: unknown, config?: AxiosRequestConfig): Promise<T> {
+    return api.patch(url, body, config).then((response) => parseSingle<T>(response.data));
+  },
+  remove(url: string, config?: AxiosRequestConfig): Promise<void> {
+    return api.delete(url, config).then(() => undefined);
+  },
+};

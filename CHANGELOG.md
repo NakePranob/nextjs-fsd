@@ -21,6 +21,11 @@ page with a client leaf changes shape.
 
 ### Added
 
+- `add error-handling --http-contract <file>` reads the Go API's
+  `http-contract.json` and generates `shared/api/contract.ts` with matching
+  single/list/error parsers. The client exposes `getSingle`, `getPage`,
+  `postSingle`, `putSingle`, `patchSingle`, and `remove`, and generated slices
+  use them; feature code keeps the normalised `Page<T>`/`ApiError` shapes.
 - `generate api-route [name]` — handler logic in `_app/api-routes/` plus
   the `route.ts` that re-exports it as GET. `--route` serves one handler
   from a second URL when asked.

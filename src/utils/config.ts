@@ -3,6 +3,7 @@ import fs from "fs-extra";
 import { PackageManager, ProjectConfig, ProjectFeatures } from "../types";
 import { Locale } from "./copy";
 import { detectPackageManager, writeJson } from "./project";
+import { normalizeHttpContract } from "./http-contract";
 
 const CONFIG_FILE = "nextjs-fsd.config.json";
 export const CONFIG_SCHEMA_VERSION = 1;
@@ -119,6 +120,7 @@ export function readConfig(projectDir: string): ProjectConfig {
     alias: raw.alias ?? "@",
     packageManager: (raw.packageManager as PackageManager) ?? detectPackageManager(projectDir),
     features: features as ProjectFeatures,
+    http: normalizeHttpContract(raw.http, CONFIG_FILE),
     ...(raw.scaffoldVersion ? { scaffoldVersion: raw.scaffoldVersion } : {}),
   };
 }

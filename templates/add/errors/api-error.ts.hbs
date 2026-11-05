@@ -1,18 +1,6 @@
 import axios from "axios";
 
-/**
- * Error envelope the API uses on failure — one `error` object with a stable
- * machine code. Adjust the field names here if your backend words them
- * differently; this is the only place that reads the wire format.
- */
-type ErrorEnvelope = {
-  error?: {
-    code?: string;
-    message?: string;
-    details?: unknown;
-    request_id?: string;
-  };
-};
+import { parseErrorBody } from "./contract";
 
 /**
  * Normalised failure for anything crossing the API boundary. Callers branch on
@@ -53,15 +41,15 @@ export function toApiError(error: unknown): ApiError {
 
   if (axios.isAxiosError(error)) {
     const status = error.response?.status ?? 0;
-    const envelope = (error.response?.data as ErrorEnvelope | undefined)?.error;
+    const envelope = parseErrorBody(error.response?.data);
     return new ApiError(
       // status 0 means the request never got an answer — a dead API, DNS, or a
       // CORS rejection all land here, and they read the same to the user.
-      envelope?.code ?? (status === 0 ? "NETWORK" : "UNKNOWN"),
-      envelope?.message ?? error.message,
+      envelope.code || (status === 0 ? "NETWORK" : "UNKNOWN"),
+      envelope.message || error.message,
       status,
-      envelope?.details,
-      envelope?.request_id,
+      envelope.details,
+      envelope.requestId,
     );
   }
 

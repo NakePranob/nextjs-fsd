@@ -1,5 +1,6 @@
 export { ApiError, toApiError } from "./api-error";
 export { commonErrorCatalog, type ErrorCatalog } from "./error-catalog";
 export { resolveApiError, type ResolveApiErrorOptions } from "./error-resolver";
-export { api, createApiClient, refreshAccessToken } from "./client";
+export { api, apiClient, createApiClient, refreshAccessToken } from "./client";
+export { parseErrorBody, parsePage, parseSingle, type ErrorBody, type Page } from "./contract";
 export { makeQueryClient, sessionKey } from "./query-client";
