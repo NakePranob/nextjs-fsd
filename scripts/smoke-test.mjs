@@ -811,7 +811,7 @@ const mcpRun = spawnSync(process.execPath, [CLI, "mcp", "--root", "."], {
   input: [
     JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} }),
     JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/list" }),
-    JSON.stringify({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "fsd_config_show", arguments: {} } }),
+    JSON.stringify({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "nextjs_fsd_config_show", arguments: {} } }),
   ].join("\n") + "\n",
   encoding: "utf8",
 });
@@ -819,7 +819,7 @@ check("mcp exposes the agent tools and answers config as JSON", () => {
   const lines = mcpRun.stdout.trim().split("\n").map((line) => JSON.parse(line));
   assert.deepEqual(
     lines[1].result.tools.map((tool) => tool.name),
-    ["fsd_interview", "fsd_plan", "fsd_apply", "fsd_check", "fsd_config_show"]
+    ["nextjs_fsd_interview", "nextjs_fsd_plan", "nextjs_fsd_apply", "nextjs_fsd_check", "nextjs_fsd_config_show"]
   );
   assert.equal(JSON.parse(lines[2].result.content[0].text).http.preset, "items");
 });

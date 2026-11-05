@@ -37,12 +37,12 @@ const PROTOCOL_VERSION = "2024-11-05";
 
 const TOOLS: ToolDefinition[] = [
   {
-    name: "fsd_interview",
+    name: "nextjs_fsd_interview",
     description: "Return the nextjs-fsd interview questions as JSON. Writes nothing.",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
   },
   {
-    name: "fsd_plan",
+    name: "nextjs_fsd_plan",
     description: "Resolve answers and print the scaffold plan. Writes no project files.",
     inputSchema: {
       type: "object",
@@ -54,7 +54,7 @@ const TOOLS: ToolDefinition[] = [
     },
   },
   {
-    name: "fsd_apply",
+    name: "nextjs_fsd_apply",
     description: "Run the plan built from the same answers object used by fsd_plan.",
     inputSchema: {
       type: "object",
@@ -66,12 +66,12 @@ const TOOLS: ToolDefinition[] = [
     },
   },
   {
-    name: "fsd_check",
+    name: "nextjs_fsd_check",
     description: "Check the project's config, feature flags, contract, and generated guidance.",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
   },
   {
-    name: "fsd_config_show",
+    name: "nextjs_fsd_config_show",
     description: "Print the resolved nextjs-fsd.config.json for the server root.",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
   },
@@ -146,13 +146,13 @@ async function withAnswersFile<T>(answers: unknown, fn: (file: string) => Promis
 }
 
 async function callTool(name: string, args: Record<string, unknown>, root: string): Promise<unknown> {
-  if (name === "fsd_interview") {
+  if (name === "nextjs_fsd_interview") {
     const result = await runCli(root, ["interview"]);
     if (result.code !== 0) throw new McpToolError("CLI_FAILED", result.stderr || result.stdout);
     return parseJson(result.stdout, "interview");
   }
 
-  if (name === "fsd_plan") {
+  if (name === "nextjs_fsd_plan") {
     return withAnswersFile(args.answers, async (file) => {
       const result = await runCli(root, ["plan", "--answers", file]);
       if (result.code !== 0) throw new McpToolError("CLI_FAILED", result.stderr || result.stdout);
@@ -160,7 +160,7 @@ async function callTool(name: string, args: Record<string, unknown>, root: strin
     });
   }
 
-  if (name === "fsd_apply") {
+  if (name === "nextjs_fsd_apply") {
     return withAnswersFile(args.answers, async (file) => {
       const result = await runCli(root, ["apply", "--answers", file]);
       const payload = parseJson(result.stdout, "apply") as { ok?: boolean; warnings?: string[] };
@@ -172,14 +172,14 @@ async function callTool(name: string, args: Record<string, unknown>, root: strin
     });
   }
 
-  if (name === "fsd_check") {
+  if (name === "nextjs_fsd_check") {
     const result = await runCli(root, ["check"]);
     // check answers with a JSON report even when it finds problems; returning it
     // is more useful to an agent than a transport error that drops the checks.
     return parseJson(result.stdout, "check");
   }
 
-  if (name === "fsd_config_show") {
+  if (name === "nextjs_fsd_config_show") {
     const result = await runCli(root, ["config", "show", "--json"]);
     if (result.code !== 0) throw new McpToolError("CLI_FAILED", result.stderr || result.stdout);
     return parseJson(result.stdout, "config show");

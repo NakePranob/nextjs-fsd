@@ -163,8 +163,8 @@ therefore safe. `check` exits 1 when a feature flag points at missing files or
 the config cannot be read, and only warns about convenience gaps such as a
 missing steiger config.
 
-`mcp` serves five tools — `fsd_interview`, `fsd_plan`, `fsd_apply`,
-`fsd_check`, and `fsd_config_show` — and keeps `--root` inside the directory it
+`mcp` serves five tools — `nextjs_fsd_interview`, `nextjs_fsd_plan`,
+`nextjs_fsd_apply`, `nextjs_fsd_check`, and `nextjs_fsd_config_show` — and keeps `--root` inside the directory it
 was launched from.
 
 ## Command overview
