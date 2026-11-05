@@ -176,6 +176,9 @@ needs them.
 | `add error-handling` | Add the API error boundary and error catalogs. |
 | `add prettier` | Add formatting with Tailwind class sorting. |
 | `config` | Inspect and change project settings. |
+| `interview` / `plan` / `apply` | Drive the same commands from JSON answers, with a no-write plan step. |
+| `check` | Report config, feature flags, and the HTTP contract as JSON. |
+| `mcp` | Serve those operations to an agent over stdio MCP. |
 
 Run any command with `--help` for its current options. The full command
 reference — wizard behavior, every option, generated output, and assumptions —

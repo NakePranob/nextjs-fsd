@@ -119,6 +119,54 @@ nextjs-fsd generate slice features checkout --segments ui,model --defaults
 With no TTY, a command that still needs an answer exits 1 without writing
 anything, and names every missing flag at once instead of failing on the first.
 
+### Agent interface
+
+An agent should not build flags by hand or scrape human output. Five commands
+provide the same operations as JSON:
+
+~~~bash
+nextjs-fsd interview                    # questions, options, and defaults; writes nothing
+nextjs-fsd plan --answers answers.json  # validated steps; writes nothing
+nextjs-fsd apply --answers answers.json # runs the steps in order
+nextjs-fsd check                        # config, feature flags, contract, guidance
+nextjs-fsd mcp --root .                 # the same operations over stdio MCP
+~~~
+
+`plan` and `apply` read one answers file:
+
+~~~json
+{
+  "locale": "en",
+  "install": false,
+  "hooks": false,
+  "httpContract": "../api/http-contract.json",
+  "add": ["error-handling", "auth"],
+  "generate": [
+    { "kind": "page", "name": "dashboard", "title": "Dashboard" },
+    { "kind": "slice", "layer": "features", "name": "checkout", "segments": ["ui", "api"] }
+  ]
+}
+~~~
+
+`init` defaults to true and is skipped when `nextjs-fsd.config.json` already
+exists. `add` accepts `error-handling`, `auth`, and `prettier`; dependencies are
+resolved in the plan (`auth` implies `error-handling`, and a contract needs the
+error-handling install). `generate` accepts the four kinds the CLI generates,
+with the same options as their flags. `httpContract` is resolved from the
+project root.
+
+`plan` prints `writes: false` plus ordered `{ id, command }` steps and any
+warnings. `apply` spawns those exact commands rather than generating files
+itself; it stops at the first real failure and marks a step `skipped` when the
+CLI reports there was nothing left to write. Replaying the same answers is
+therefore safe. `check` exits 1 when a feature flag points at missing files or
+the config cannot be read, and only warns about convenience gaps such as a
+missing steiger config.
+
+`mcp` serves five tools — `fsd_interview`, `fsd_plan`, `fsd_apply`,
+`fsd_check`, and `fsd_config_show` — and keeps `--root` inside the directory it
+was launched from.
+
 ## Command overview
 
 | Command | Purpose | Alias |

@@ -70,6 +70,42 @@ Feature gates are deliberate:
 - `add prettier` formats the whole package once on purpose; commit that pass
   separately.
 
+## Agent interface
+
+For a script or an agent, use the JSON commands instead of assembling flags by
+hand. Neither `interview` nor `plan` writes anything:
+
+~~~bash
+nextjs-fsd interview                              # questions + defaults as JSON
+nextjs-fsd plan --answers answers.json            # ordered steps, writes nothing
+nextjs-fsd apply --answers answers.json           # runs the plan, stops at the first failure
+nextjs-fsd check                                  # config, feature flags, contract as JSON
+nextjs-fsd mcp --root .                           # stdio MCP server for the same four operations
+~~~
+
+The answers file is the one decision surface:
+
+~~~json
+{
+  "locale": "en",
+  "install": false,
+  "hooks": false,
+  "httpContract": "../api/http-contract.json",
+  "add": ["error-handling", "auth"],
+  "generate": [
+    { "kind": "page", "name": "dashboard", "title": "Dashboard" },
+    { "kind": "slice", "layer": "features", "name": "checkout", "segments": ["ui", "api"] }
+  ]
+}
+~~~
+
+`plan` resolves feature gates (for example `add auth` implies error handling),
+lists the exact CLI commands, and records the contract preset it read. `apply`
+runs those same commands — it does not have a second generator — and replaying
+it skips steps that are already complete. `httpContract` only applies to
+`add error-handling`; if that is already installed, remove `shared/api` before
+reinstalling with a different contract.
+
 ## Extend, do not rewrite
 
 Re-run the same command to add to an existing slice. Do not hand-write files
