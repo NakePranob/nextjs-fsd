@@ -9,6 +9,18 @@ Only versions with a `v*.*.*` tag are on npm. 0.2.0, 0.3.0 and 0.3.1 were
 released into the repository but never tagged, so `npm install @nakedev/nextjs-fsd`
 still resolves 0.1.1.
 
+## Unreleased
+
+### Added
+
+- `interview` prints the scaffold decisions as JSON; `plan --answers` validates
+  one answers file and prints the ordered commands without writing anything;
+  `apply --answers` runs those commands and stops at the first real failure;
+  `check` verifies config, feature flags, and the HTTP contract; and `mcp
+  --root` serves the same operations over stdio MCP. These commands route to
+  the existing generators — there is no second implementation of scaffolding
+  rules — and replaying an apply skips steps that are already complete.
+
 ## 0.4.0
 
 Released with the README landing page and a static architecture diagram that renders on npm.

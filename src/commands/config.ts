@@ -3,8 +3,12 @@ import { readConfig, writeConfig } from "../utils/config";
 import { parseLocale } from "../utils/copy";
 import { cliVersion } from "../utils/version";
 
-export function showProjectConfig(): void {
+export function showProjectConfig(json = false): void {
   const config = readConfig(process.cwd());
+  if (json) {
+    console.log(JSON.stringify(config, null, 2));
+    return;
+  }
   const rows: [string, string][] = [
     ["FSD layers", `${config.srcDir}/ (_app, _pages, features, entities, shared)`],
     ["App Router", `${config.appDir}/`],

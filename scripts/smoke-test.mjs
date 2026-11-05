@@ -8,6 +8,7 @@
 // below is the parts of a create-next-app project this CLI actually reads.
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
 import fs from "node:fs";
 import os from "node:os";
@@ -731,6 +732,98 @@ check("the client exposes contract-aware methods", () => {
   assert.match(read(k, "src/shared/api/index.ts"), /apiClient/);
 });
 
+// ------------------------------------------------------- agent interface
+
+console.log("\nagent interface");
+const agent = fixture(path.join(root, "agent"));
+const interview = JSON.parse(cli(agent, ["interview"]));
+check("interview describes the decisions without writing", () => {
+  const ids = interview.questions.map((question) => question.id);
+  assert.ok(ids.includes("http.contract"));
+  assert.ok(ids.includes("features.add"));
+  assert.equal(fs.existsSync(path.join(agent, "nextjs-fsd.config.json")), false);
+});
+
+const agentResolved = { single: "data", list: "items-total", error: "errors-array" };
+const agentHash = `sha256:${createHash("sha256").update(JSON.stringify(agentResolved)).digest("hex")}`;
+fs.writeFileSync(
+  path.join(agent, "http-contract.json"),
+  JSON.stringify({ schemaVersion: 1, preset: "items", resolved: agentResolved, presetHash: agentHash }, null, 2)
+);
+fs.writeFileSync(
+  path.join(agent, "answers.json"),
+  JSON.stringify(
+    {
+      locale: "en",
+      install: false,
+      hooks: false,
+      httpContract: "http-contract.json",
+      add: ["error-handling"],
+      generate: [
+        { kind: "page", name: "dashboard", title: "Dashboard" },
+        { kind: "slice", layer: "features", name: "checkout", segments: ["ui", "api"] },
+      ],
+    },
+    null,
+    2
+  )
+);
+const plan = JSON.parse(cli(agent, ["plan", "--answers", "answers.json"]));
+check("plan lists the ordered steps and writes nothing", () => {
+  assert.equal(plan.writes, false);
+  assert.equal(plan.initialized, false);
+  assert.deepEqual(
+    plan.steps.map((step) => step.id),
+    ["init", "add-error-handling", "generate-page-dashboard", "generate-slice-checkout"]
+  );
+  assert.equal(fs.existsSync(path.join(agent, "nextjs-fsd.config.json")), false);
+});
+
+const applied = JSON.parse(cli(agent, ["apply", "--answers", "answers.json"]));
+check("apply runs every step and records the contract", () => {
+  assert.equal(applied.ok, true);
+  assert.ok(applied.steps.every((step) => step.ok));
+  assert.equal(JSON.parse(read(agent, "nextjs-fsd.config.json")).http.preset, "items");
+  assert.match(read(agent, "src/shared/api/contract.ts"), /value\.items/);
+  assert.match(read(agent, "src/features/checkout/api/checkout.ts"), /apiClient\.getPage/);
+  assert.ok(fs.existsSync(path.join(agent, "app/dashboard/page.tsx")));
+});
+
+check("apply is replayable — a finished step is skipped, not an error", () => {
+  const replay = JSON.parse(cli(agent, ["apply", "--answers", "answers.json"]));
+  assert.equal(replay.ok, true);
+  assert.deepEqual(
+    replay.steps.map((step) => step.id),
+    ["generate-page-dashboard", "generate-slice-checkout"]
+  );
+});
+
+const checked = JSON.parse(cli(agent, ["check"]));
+check("check reports the resolved contract and feature flags", () => {
+  assert.equal(checked.ok, true);
+  assert.equal(checked.initialized, true);
+  assert.match(checked.checks.find((item) => item.id === "contract").detail, /items/);
+  assert.equal(checked.config.http.preset, "items");
+});
+
+const mcpRun = spawnSync(process.execPath, [CLI, "mcp", "--root", "."], {
+  cwd: agent,
+  input: [
+    JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} }),
+    JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/list" }),
+    JSON.stringify({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "nextjs_fsd_config_show", arguments: {} } }),
+  ].join("\n") + "\n",
+  encoding: "utf8",
+});
+check("mcp exposes the agent tools and answers config as JSON", () => {
+  const lines = mcpRun.stdout.trim().split("\n").map((line) => JSON.parse(line));
+  assert.deepEqual(
+    lines[1].result.tools.map((tool) => tool.name),
+    ["nextjs_fsd_interview", "nextjs_fsd_plan", "nextjs_fsd_apply", "nextjs_fsd_check", "nextjs_fsd_config_show"]
+  );
+  assert.equal(JSON.parse(lines[2].result.content[0].text).http.preset, "items");
+});
+
 // ---------------------------------------------------------------- vitest shape
 
 console.log("\nvitest project");
@@ -870,6 +963,7 @@ typecheck(a, "app/, thai, auth + pages + slices");
 typecheck(b, "src/app/, english, auth");
 typecheck(c, "bun, error handling + auth + both generated tests");
 typecheck(k, "HTTP contract preset + client");
+typecheck(agent, "agent interface + contract + generated slices");
 
 // --------------------------------------------------------- no unrendered vars
 
