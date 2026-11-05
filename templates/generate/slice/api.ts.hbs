@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient, type UseQueryResult } from "@tanstack/react-query";
 
-import { ApiError, api } from "{{alias}}/shared/api";
+import { ApiError, apiClient } from "{{alias}}/shared/api";
 
 /**
  * The record this slice is about. TODO: replace with the shape the API
@@ -23,7 +23,7 @@ export const {{camel}}Key = ["{{name}}"] as const;
 export function use{{pascal}}Query(): UseQueryResult<{{pascal}}Record[], ApiError> {
   return useQuery<{{pascal}}Record[], ApiError>({
     queryKey: {{camel}}Key,
-    queryFn: () => api.get<{{pascal}}Record[]>("/{{name}}").then((response) => response.data),
+    queryFn: () => apiClient.getPage<{{pascal}}Record>("/{{name}}").then((page) => page.items),
   });
 }
 
@@ -36,7 +36,7 @@ export function use{{pascal}}Query(): UseQueryResult<{{pascal}}Record[], ApiErro
 export function useCreate{{pascal}}() {
   const queryClient = useQueryClient();
   return useMutation<{{pascal}}Record, ApiError, Omit<{{pascal}}Record, "id">>({
-    mutationFn: (input) => api.post<{{pascal}}Record>("/{{name}}", input).then((response) => response.data),
+    mutationFn: (input) => apiClient.postSingle<{{pascal}}Record>("/{{name}}", input),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: {{camel}}Key }),
   });
 }

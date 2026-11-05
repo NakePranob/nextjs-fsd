@@ -1,0 +1,68 @@
+/**
+ * Response contract exported by the Go API's http-contract.json.
+ * Preset: {{http.preset}}
+ *
+ * Everything outside this file works with the normalised Page/ErrorBody
+ * shapes; only these parsers know the wire format.
+ */
+
+export type Page<T> = {
+  items: T[];
+  limit?: number;
+  offset?: number;
+  total: number;
+};
+
+export type ErrorBody = {
+  code: string;
+  message: string;
+  details?: unknown;
+  requestId?: string;
+};
+
+export function parseSingle<T>(body: unknown): T {
+{{#if (eq http.resolved.single "data")}}  return (body as { data: T }).data;
+{{else}}  return body as T;
+{{/if}}
+}
+
+export function parsePage<T>(body: unknown): Page<T> {
+{{#if (eq http.resolved.list "data-meta")}}  const value = body as { data?: T[]; meta?: { limit?: number; offset?: number; total?: number } };
+  return {
+    items: value.data ?? [],
+    limit: value.meta?.limit,
+    offset: value.meta?.offset,
+    total: value.meta?.total ?? 0,
+  };
+{{else if (eq http.resolved.list "items-total")}}  const value = body as { items?: T[]; total?: number };
+  return {
+    items: value.items ?? [],
+    total: value.total ?? 0,
+  };
+{{else}}  const value = body as { data?: T[]; limit?: number; offset?: number; total?: number };
+  return {
+    items: value.data ?? [],
+    limit: value.limit,
+    offset: value.offset,
+    total: value.total ?? 0,
+  };
+{{/if}}
+}
+
+export function parseErrorBody(body: unknown): ErrorBody {
+{{#if (eq http.resolved.error "errors-array")}}  const value = body as { errors?: Array<ErrorBody & { request_id?: string }> };
+  const first = value.errors?.[0];
+  return first
+    ? { code: first.code, message: first.message, details: first.details, requestId: first.requestId ?? first.request_id }
+    : { code: "UNKNOWN", message: "Request failed" };
+{{else if (eq http.resolved.error "problem-json")}}  const value = body as { title?: string; detail?: string; status?: number; instance?: string };
+  return {
+    code: value.title ?? "UNKNOWN",
+    message: value.detail ?? value.title ?? "Request failed",
+    details: value.status,
+    requestId: value.instance,
+  };
+{{else}}  const value = body as { error?: ErrorBody };
+  return value.error ?? { code: "UNKNOWN", message: "Request failed" };
+{{/if}}
+}

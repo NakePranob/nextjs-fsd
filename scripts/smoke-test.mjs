@@ -696,6 +696,41 @@ check("a 401 from anywhere resets the session entry rather than removing it", ()
   assert.doesNotMatch(queryClient, /^import .*shared\/auth/m);
 });
 
+// ---------------------------------------------------------- HTTP contract
+
+console.log("\nHTTP contract preset");
+const k = fixture(path.join(root, "k"));
+cli(k, ["init", "--no-install", "--defaults"]);
+fs.writeFileSync(
+  path.join(k, "http-contract.json"),
+  JSON.stringify({
+    schemaVersion: 1,
+    preset: "items",
+    resolved: { single: "data", list: "items-total", error: "errors-array" },
+    presetHash: "sha256:placeholder",
+  }, null, 2)
+);
+// The hash is checked; compute the real one before the CLI reads the file.
+const crypto = await import("node:crypto");
+const contractResolved = { single: "data", list: "items-total", error: "errors-array" };
+const contractHash = `sha256:${crypto.createHash("sha256").update(JSON.stringify(contractResolved)).digest("hex")}`;
+// JSON.stringify key order above is not the canonical order, so write the
+// artifact with the hash the CLI computes from its canonical object.
+const contract = JSON.parse(fs.readFileSync(path.join(k, "http-contract.json"), "utf8"));
+contract.presetHash = contractHash;
+fs.writeFileSync(path.join(k, "http-contract.json"), JSON.stringify(contract, null, 2));
+cli(k, ["add", "error-handling", "--http-contract", "http-contract.json", "--no-install", "-y"]);
+check("the contract parser follows the selected shapes", () => {
+  const source = read(k, "src/shared/api/contract.ts");
+  assert.match(source, /value\.items/);
+  assert.match(source, /value\.errors\?\.\[0\]/);
+  assert.match(JSON.parse(read(k, "nextjs-fsd.config.json")).http.preset, /items/);
+});
+check("the client exposes contract-aware methods", () => {
+  assert.match(read(k, "src/shared/api/client.ts"), /getPage<T>/);
+  assert.match(read(k, "src/shared/api/index.ts"), /apiClient/);
+});
+
 // ---------------------------------------------------------------- vitest shape
 
 console.log("\nvitest project");
@@ -834,6 +869,7 @@ console.log("\ntypecheck");
 typecheck(a, "app/, thai, auth + pages + slices");
 typecheck(b, "src/app/, english, auth");
 typecheck(c, "bun, error handling + auth + both generated tests");
+typecheck(k, "HTTP contract preset + client");
 
 // --------------------------------------------------------- no unrendered vars
 

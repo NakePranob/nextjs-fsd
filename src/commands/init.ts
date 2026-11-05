@@ -5,6 +5,7 @@ import pc from "picocolors";
 import { ProjectConfig } from "../types";
 import { confirm, select } from "../prompts";
 import { CONFIG_SCHEMA_VERSION, detectFeatures, isProjectDir, writeConfig } from "../utils/config";
+import { defaultHttpContract } from "../utils/http-contract";
 import { Locale, copyFor } from "../utils/copy";
 import { applyTemplates, readTemplateTree, renderTemplate } from "../utils/render";
 import {
@@ -217,6 +218,7 @@ export async function initProject(projectDir: string, opts: InitOptions): Promis
     alias,
     packageManager,
     features: detectFeatures(projectDir, srcDir),
+    http: defaultHttpContract(),
     scaffoldVersion: cliVersion(),
   };
   writeConfig(projectDir, config);

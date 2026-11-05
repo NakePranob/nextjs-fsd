@@ -4,7 +4,8 @@ import pc from "picocolors";
 
 import { ProjectConfig } from "../types";
 import { confirm } from "../prompts";
-import { readConfig, setFeature } from "../utils/config";
+import { readConfig, setFeature, writeConfig } from "../utils/config";
+import { contractConfig, readHttpContract } from "../utils/http-contract";
 import { asCatalogEntries, copyFor } from "../utils/copy";
 import { applyTemplates, formatFiles, renderTemplate, TemplateEntry } from "../utils/render";
 import {
@@ -32,6 +33,7 @@ const PRETTIER_DEV_DEPS = {
 export interface AddOptions {
   install?: boolean;
   yes?: boolean;
+  httpContract?: string;
 }
 
 // confirmAdd prints what an add is about to do and asks before it happens: it
@@ -58,6 +60,8 @@ export async function addErrorHandling(opts: AddOptions): Promise<string[]> {
       `error handling is already installed (${config.srcDir}/shared/api/client.ts exists) — edit the catalogs there, or delete the directory to reinstall`
     );
   }
+  const http = opts.httpContract ? contractConfig(readHttpContract(opts.httpContract)) : config.http;
+  const effectiveConfig = { ...config, http };
 
   const providersFile = `${config.srcDir}/_app/providers/index.tsx`;
   const ownsProviders = !fs.existsSync(path.join(projectDir, providersFile));
@@ -86,8 +90,9 @@ export async function addErrorHandling(opts: AddOptions): Promise<string[]> {
   // resolves the alias with no config and vitest still needs its own.
   const testRunner = config.packageManager === "bun" ? "bun:test" : "vitest";
 
-  const context = { ...errorContext(config), testRunner };
+  const context = { ...errorContext(effectiveConfig), testRunner };
   const entries: TemplateEntry[] = [
+    { template: "add/errors/contract.ts.hbs", output: `${config.srcDir}/shared/api/contract.ts` },
     { template: "add/errors/api-error.ts.hbs", output: `${config.srcDir}/shared/api/api-error.ts` },
     { template: "add/errors/error-catalog.ts.hbs", output: `${config.srcDir}/shared/api/error-catalog.ts` },
     { template: "add/errors/error-resolver.ts.hbs", output: `${config.srcDir}/shared/api/error-resolver.ts` },
@@ -157,6 +162,9 @@ export async function addErrorHandling(opts: AddOptions): Promise<string[]> {
     if (appendScript(projectDir, "test", "bun test")) written.push("package.json (test script)");
   }
   setFeature(projectDir, "errorHandling", true);
+  if (opts.httpContract) {
+    writeConfig(projectDir, { ...readConfig(projectDir), http });
+  }
   report(written, added);
 
   if (!ownsProviders) {
